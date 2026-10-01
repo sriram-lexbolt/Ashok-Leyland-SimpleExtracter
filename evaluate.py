@@ -1,4 +1,9 @@
-"""Independent sampled holdout evaluation; never tune the engine in this script."""
+"""Independent sampled holdout evaluation; never tune the engine in this script.
+
+Without arguments: reproduces the frozen v1.0 holdout result and refuses to run if engine.py changed.
+With --regression: re-checks the same documents with a newer parser. Those documents have been
+examined since the v1.0 result, so a regression run is not an unseen-accuracy claim.
+"""
 from __future__ import annotations
 import hashlib
 import json
@@ -7,7 +12,7 @@ import re
 import sys
 import unicodedata
 
-from extractor.engine import extract_pdf
+from extractor.engine import PARSER_VERSION, extract_pdf
 
 ROOT = Path(__file__).resolve().parent
 
@@ -39,18 +44,19 @@ def table_cell(result, spec):
     return rows[occurrence][spec["value_index"]]["text"]
 
 
-def evaluate():
+def evaluate(regression=False):
     frozen = json.loads((ROOT / "evaluation/frozen_parser.json").read_text(encoding="utf-8"))
     engine_hash = hashlib.sha256((ROOT / "extractor/engine.py").read_bytes()).hexdigest()
-    if frozen["engine_sha256"] != engine_hash:
+    if not regression and frozen["engine_sha256"] != engine_hash:
         raise RuntimeError("The parser changed after the holdout freeze. Preserve the original report and use a NEW unseen test set for a new accuracy claim.")
     expected_path = ROOT / "evaluation/holdout_expected.json"
     expected = json.loads(expected_path.read_text(encoding="utf-8"))
     manifest = json.loads((ROOT / "dataset_manifest.json").read_text(encoding="utf-8"))
     hashes = {Path(d["path"]).name: d["sha256"] for d in manifest["holdout"]}
-    output = ROOT / "output/holdout"
+    output = ROOT / ("output/regression" if regression else "output/holdout")
     output.mkdir(parents=True, exist_ok=True)
-    report = {"frozen_parser": frozen, "ground_truth_sha256": hashlib.sha256(expected_path.read_bytes()).hexdigest(),
+    report = {"mode": "regression" if regression else "holdout", "parser_version": PARSER_VERSION,
+              "engine_sha256": engine_hash, "frozen_parser": frozen, "ground_truth_sha256": hashlib.sha256(expected_path.read_bytes()).hexdigest(),
               "method": expected["method"], "limitations": expected["limitations"], "documents": []}
     for doc in expected["documents"]:
         path = ROOT / "pdfs/holdout" / doc["filename"]
@@ -87,7 +93,7 @@ def evaluate():
                          "variant_label_checks_passed": sum(c["passed"] for c in labels), "variant_label_checks_total": len(labels),
                          "pages_processed": sum(d["processed_pages"] for d in report["documents"]),
                          "expected_pages": sum(d["expected_pages"] for d in report["documents"])}
-    report_path = ROOT / "evaluation/holdout_report.json"
+    report_path = ROOT / f"evaluation/{'regression' if regression else 'holdout'}_report.json"
     report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     write_markdown(report)
     print(json.dumps(report["summary"], indent=2))
@@ -99,8 +105,15 @@ def evaluate():
 
 def write_markdown(report):
     s = report["summary"]
-    lines = ["# Holdout evaluation", "", f"Frozen parser: `{report['frozen_parser']['parser_version']}`.", "",
-             f"Processed **{s['pages_processed']}/{s['expected_pages']} pages** across two reserved PDFs.", "",
+    regression = report.get("mode") == "regression"
+    if regression:
+        lines = ["# Regression check on the former holdout", "",
+                 f"Parser: `{report['parser_version']}`. The original v1.0 result is in [HOLDOUT_REPORT.md](HOLDOUT_REPORT.md).", "",
+                 "**These two documents were examined while fixing the v1.0 failures, so this is a regression check, not unseen accuracy.** "
+                 "A new accuracy claim needs PDFs that were not used to build this version.", ""]
+    else:
+        lines = ["# Holdout evaluation", "", f"Frozen parser: `{report['frozen_parser']['parser_version']}`.", ""]
+    lines += [f"Processed **{s['pages_processed']}/{s['expected_pages']} pages** across two reserved PDFs.", "",
              f"Sampled field-value/table-cell checks: **{s['value_checks_passed']}/{s['value_checks_total']} ({s['sampled_value_accuracy_percent']}%)**.", "",
              f"Variant label checks: **{s['variant_label_checks_passed']}/{s['variant_label_checks_total']}**.", "",
              "This percentage describes only the manually annotated sample; it is not a whole-document accuracy estimate.", "",
@@ -120,11 +133,11 @@ def write_markdown(report):
                 failures.append(f"- {d['filename']}, page {spec['page']}, {locator}: expected `{json.dumps(expected, ensure_ascii=False)}`; found `{json.dumps(c['actual'], ensure_ascii=False)}`.")
     lines.extend(failures or ["No failures in the sampled checks."])
     lines += ["", "The original page text, table cells, and cell positions remain available in JSON for manual review. Diagrams and embedded image content are not transcribed. Variant labels are inferred conservatively and are incomplete for layouts outside the development set.", "",
-              "To repeat this evaluation without changing the frozen parser: `.\\.venv\\Scripts\\python.exe evaluate.py`.", "",
+              f"To repeat this run: `.\\.venv\\Scripts\\python.exe evaluate.py{' --regression' if regression else ''}`.", "",
               "Do not tune against these held-out documents and then report a new result as unseen accuracy. Reserve new PDFs for the next parser version."]
-    (ROOT / "evaluation/HOLDOUT_REPORT.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (ROOT / f"evaluation/{'REGRESSION' if regression else 'HOLDOUT'}_REPORT.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
-    evaluate()
+    evaluate(regression="--regression" in sys.argv[1:])

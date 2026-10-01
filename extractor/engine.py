@@ -14,10 +14,16 @@ from typing import Callable
 
 import pdfplumber
 
-PARSER_VERSION = "1.0.0"
+PARSER_VERSION = "1.1.0"
 MAX_PAGES = 200
+SPACER_WIDTH = 6        # cells this narrow are layout slivers, whatever they contain
+EMPTY_SPACER_WIDTH = 12  # empty cells narrower than this are slivers too; real blank answers are much wider
+PENDING = object()  # heading row seen; its scope is the next coded clause
 CODE = re.compile(r"^((?:[A-Z]\s*)?\d+(?:\s*\.\s*\d+)+)\s*\.?(?:\s+[A-Z]\.)?$")
-REFERENCE = re.compile(r"\b(?:Refer\s+)?(?:Annexure|Annex|Enclosure|Appendix)\s*[–\-:]?\s*[A-Z0-9]+(?:\s*[–\-]\s*[A-Z0-9]+)?", re.I)
+# The identifier after the keyword must contain a digit (T7, 4K, 6A) or be a single capital letter (annex G),
+# so ordinary words ("Annexure with", "enclosurev") are not taken as references.
+REFERENCE = re.compile(r"\b(?:Refer\s+)?(?:Annexure|Annex|Enclosure|Appendix)\b\s*[–\-:]?\s*"
+                       r"(?-i:[A-Z]{0,2}\d[A-Z0-9]*|[A-Z]\b)(?:\s*[–\-]\s*(?-i:[A-Z0-9]+)\b)?", re.I)
 
 
 class ExtractionError(ValueError):
@@ -68,8 +74,35 @@ def _active_cells(table: dict, row_index: int) -> list[dict]:
 
 
 def _is_footer(cells: list[dict]) -> bool:
+    # The signature block. Some forms print "Manufacturer:" outside the ruled box,
+    # leaving only "Document No" and "Test agency" inside it.
     text = " ".join(c["text"] for c in cells).lower()
-    return "manufacturer:" in text and ("test agency" in text or "signature, name" in text)
+    return ("manufacturer:" in text or "document no" in text) and ("test agency" in text or "signature, name" in text)
+
+
+def _is_spacer(cell: dict) -> bool:
+    width = cell["bbox"][2] - cell["bbox"][0]
+    return width <= SPACER_WIDTH or (not cell["text"] and width < EMPTY_SPACER_WIDTH)
+
+
+def _value_cells(cells: list[dict], value_x: float) -> list[dict]:
+    return [c for c in cells if c["bbox"][0] >= value_x - .2 and not _is_spacer(c)]
+
+
+def _looks_like_heading(text: str) -> bool:
+    """Words such as "Blower" or "Provided Category - 5"; not a measurement, part number, placeholder or mask."""
+    text = clean(text)
+    if not text or re.fullmatch(r"(?i)na|n/a|nil|yes|no|-+|[xy]+", text):
+        return False
+    body = re.sub(r"[\s\-–]*\d{1,2}$", "", text)
+    return bool(re.search(r"[A-Za-z]{2}", body)) and not re.search(r"\d", body)
+
+
+def _is_label_row(cells: list[dict], following: list[list[dict]]) -> bool:
+    """Two or more heading-like cells, with one of the next rows' values sitting exactly under them."""
+    if len(cells) < 2 or not all(_looks_like_heading(c["text"]) for c in cells):
+        return False
+    return any(len(nxt) == len(cells) and all(_header(n, cells) is not None for n in nxt) for nxt in following)
 
 
 def _is_title(cells: list[dict]) -> bool:
@@ -106,7 +139,15 @@ def _interpret_table(table: dict, records: list[dict], context: dict) -> None:
             boundaries.append(round(desc["bbox"][2], 1))
     value_x = Counter(boundaries).most_common(1)[0][0] if boundaries else None
     headers: list[dict] = []
+    headers_row = None
+    headers_scope = None  # code whose sub-clauses a heading field applies to
+    last_row = None
     previous = context.get("previous") if coded else None
+
+    def next_values(index: int, count: int = 3) -> list[list[dict]]:
+        following = [r for r in rows[index + 1:] if any(c["text"] for c in r)][:count]
+        return [_value_cells(r, value_x) for r in following] if value_x is not None else []
+
     for row_index, cells in enumerate(rows):
         if _is_footer(cells):
             # Some PDFs connect the signature block to the main table.
@@ -117,8 +158,15 @@ def _interpret_table(table: dict, records: list[dict], context: dict) -> None:
         nonempty = [c for c in cells if c["text"]]
         if not nonempty:
             continue
+        prev_row, last_row = last_row, row_index
         code_cell = nonempty[0] if field_code(nonempty[0]["text"]) else None
         if coded and (not code_cell or code_cell["row"] != row_index):
+            # A row of column headings without a code (e.g. Blower | Low-Cost Heater | AC).
+            if value_x is not None:
+                own_values = _value_cells([c for c in cells if c["row"] == row_index], value_x)
+                if _is_label_row(own_values, next_values(row_index)):
+                    # Scoped to the clause family that follows (set below).
+                    headers, headers_row, headers_scope = own_values, row_index, PENDING
             if previous:
                 own = [c for c in cells if c["row"] == row_index and c["text"]]
                 previous["continuation_rows"].append({
@@ -128,7 +176,7 @@ def _interpret_table(table: dict, records: list[dict], context: dict) -> None:
                 # Expand true row-spanning labels (e.g. CC, FSD and HSD).
                 desc_box = context.get("description_bbox")
                 if code_cell and desc_box and any(c["bbox"] == desc_box for c in cells):
-                    right = [c for c in cells if value_x is not None and c["bbox"][0] >= value_x - .2]
+                    right = _value_cells(cells, value_x) if value_x is not None else []
                     row_label = " / ".join(c["text"] for c in own if desc_box[2] - .2 <= c["bbox"][0] < (value_x or 0) - .2) or None
                     previous["values"].extend(_value(c, table, row_index, _header(c, headers), row_label) for c in right)
             continue
@@ -142,8 +190,8 @@ def _interpret_table(table: dict, records: list[dict], context: dict) -> None:
             code = None
             description = nonempty[0]
         right = [c for c in cells if c["bbox"][0] >= description["bbox"][2] - .1]
-        # Ignore zero-width spacer columns and trailing blank cells.
-        right = [c for c in right if c["bbox"][2] - c["bbox"][0] > 6]
+        # Ignore narrow spacer columns and trailing blank slivers.
+        right = [c for c in right if not _is_spacer(c)]
         if coded and value_x is not None:
             row_labels = [c for c in right if c["bbox"][0] < value_x - .2]
             right = [c for c in right if c["bbox"][0] >= value_x - .2]
@@ -151,10 +199,17 @@ def _interpret_table(table: dict, records: list[dict], context: dict) -> None:
             row_labels = []
         row_label = " / ".join(c["text"] for c in row_labels if c["text"]) or None
         is_section = bool(code and code.endswith(".0")) or not any(c["text"] for c in right)
-        if code and code.endswith(".0"):
-            headers = []
+        # Headings end at the next .0 code, unless the heading row sits directly above it.
+        # Headings taken from a field only cover that field's own sub-clauses.
+        if code and code.endswith(".0") and not (headers_row is not None and headers_row == prev_row):
+            headers, headers_row, headers_scope = [], None, None
+        if headers_scope is PENDING and code:
+            # The heading belongs to the clause family of the next code: E28.0 → E28, D7.5.1 → D7.5.
+            headers_scope = code[:-2] if code.endswith(".0") else code.rsplit(".", 1)[0]
+        if headers_scope and headers_scope is not PENDING and not (code == headers_scope or (code or "").startswith(headers_scope + ".")):
+            headers, headers_row, headers_scope = [], None, None
         if is_section and len(right) > 1 and any(re.search(r"\b(?:WB|GVW|variant|gear|ratio)\b", c["text"], re.I) for c in right):
-            headers = right
+            headers, headers_row, headers_scope = right, row_index, None
         record = {
             "id": f"f{len(records) + 1:05d}", "field_id": code,
             "parent_id": None, "level": len(code.split(".")) if code else 1,
@@ -166,6 +221,9 @@ def _interpret_table(table: dict, records: list[dict], context: dict) -> None:
             "continuation_rows": [], "references": [],
         }
         records.append(record)
+        # A field whose values are headings for the rows below it (e.g. E15.3 "Provided Category - 5 | 6").
+        if code and value_x is not None and not headers and not is_section and _is_label_row(right, next_values(row_index, 1)):
+            headers, headers_row, headers_scope = right, row_index, code
         previous = record
         context.update(previous=record, description_bbox=description["bbox"])
 
@@ -196,6 +254,10 @@ def _hierarchy(records: list[dict]) -> None:
             else:
                 record["level"] = 1
             seen[code] = record
+        elif section and record["kind"] == "section" and not section["field_id"]:
+            # Without codes, consecutive headings are siblings, not nested.
+            record["parent_id"] = section["parent_id"]
+            record["level"] = section["level"]
         elif section:
             record["parent_id"] = section["id"]
             record["level"] = section["level"] + 1

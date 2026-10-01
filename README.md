@@ -33,9 +33,24 @@ Multiple values stay in source order. Some development layouts also receive vari
 
 This version reads selectable PDF text and ruled tables using pdfplumber. **It does not transcribe scanned pages or diagrams.** Such pages/content are flagged for review. Fields from unruled text are a conservative fallback; the full page text remains available.
 
-### Known issues from the holdout
+### Changes in parser v1.1.0
 
-Some multi-column layouts include a narrow blank spacer cell in the field values. Some category/heater/AC headers are present in raw tables but are not assigned as `column_label` values. Review the Tables view when interpreting variants. The [holdout report](evaluation/HOLDOUT_REPORT.md) identifies the measured failures. These cases were left in the frozen version instead of tuning against the reserved test set.
+- Empty spacer cells narrower than 12 pt are no longer reported as blank values (v1.0 kept a 7 pt sliver in Table 06 E28.4 and E29.4, and blanks inside the Table 11 code grids). Filled cells are only dropped at 6 pt or narrower, as before.
+- Column headings are also taken from a heading row without a clause number (Table 06 "Blower / Low-Cost Heater / AC") and from a field whose values are headings for its sub-clauses (Table 06 E15.3 "Provided Category - 5 / 6", Table 03 B3.1 "APOLLO / CEAT"). Headings must be words, not measurements, part numbers, placeholders or masked text, and they apply only to their own clause family.
+- A signature box with "Document No" and "Test agency" is recognised as the footer even when "Manufacturer:" is printed outside it (Table 07 pages 1–3 no longer produce two junk records each).
+- On forms without clause numbers, consecutive section headings are siblings instead of nesting inside each other (Table 07 depth drops from 28 to 2).
+- A reference needs an identifier with a digit or a single capital letter, so phrases such as "Annexure with" or "Annexure to" are no longer listed.
+
+### Known issues
+
+- Forms without clause numbers (Table 07, Table 11) have no value boundary, so heading cells there become values (Table 07 "Gear ratio" lists `Gear Ratio | Overall Ratio` as values) and Table 11's code grids are read as rows named after their first cell.
+- Merged cells are shared wherever they physically reach. Table 07's variant "Type / Description" receives the variant name; the value is marked `inherited_from_merged_cell`.
+- Clause numbers are copied as printed. Table 06 prints E10.2 and E10.3 under E13.0, so they are linked to E10.0.
+- References are recorded as text and are not linked to the annexure pages or other documents.
+- Text printed outside ruled tables is only in `raw_text`.
+- Any embedded image, including a logo, sets the document status to `needs_review`.
+
+Review the Tables view when interpreting variants.
 
 The extraction uses the earlier project's idea of deterministic clause regexes and parent relationships, adapted for these AIS forms. The new schema and CPU-only extraction are independent of the original GPU/OCR and AI labeling services. Reference reviewed: [PaddleOCR-Reggex-Experiment](https://github.com/sriram403/PaddleOCR-Reggex-Experiment), commit `10276a86fe7c29b34f245622eb63af686e1734ff`. A read-only clone is in `reference/`.
 
@@ -48,7 +63,7 @@ Every PDF produces one JSON file with the same structure. The keys never change 
 ```
 {
   "schema_version": "1.0",
-  "parser_version": "1.0.0",
+  "parser_version": "1.1.0",
   "document":   { filename, sha256, page_count, table_number, standard, part, title, document_date },
   "extraction": { method, generated_at, status, field_count, table_count, requires_ocr_pages, warnings[] },
   "fields": [
@@ -75,7 +90,7 @@ Conventions: page numbers start at 1; table row and column numbers start at 0. A
 | Key | Meaning | Example |
 |---|---|---|
 | `schema_version` | Version of this JSON layout. Changes only if keys are added, renamed or removed. | `"1.0"` |
-| `parser_version` | Version of the extraction rules that produced the file. | `"1.0.0"` |
+| `parser_version` | Version of the extraction rules that produced the file. | `"1.1.0"` |
 
 ### `document`
 
@@ -195,6 +210,14 @@ Extracted JSON for the supplied files is under `output/development/` and `output
 
 The evaluator refuses to run if the engine checksum has changed. A future parser should use a new unseen set for a new accuracy claim; these two documents can then become regression cases.
 
+Parser v1.1.0 fixed the v1.0 holdout failures, so Tables 06 and 11 are now regression cases, not unseen data. Re-checking them with the same expectations:
+
+```powershell
+.\.venv\Scripts\python.exe evaluate.py --regression
+```
+
+v1.1.0 passes 74/74 value checks and 2/2 variant-label checks ([REGRESSION_REPORT.md](evaluation/REGRESSION_REPORT.md)). This shows the fixes work on those cases; it is **not** an accuracy estimate for new documents. The v1.0 result above remains the last unseen measurement. A new accuracy claim for v1.1 needs PDFs that were not used to build it.
+
 ## Automated checks
 
 ```powershell
@@ -202,12 +225,12 @@ The evaluator refuses to run if the engine checksum has changed. A future parser
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-The checks use development documents only. They cover known values, merged rows, shared cells, parent/source links, upload validation, encrypted/corrupt PDFs, preview rendering, JSON/ZIP downloads, duplicate filenames, partial batch failure, expiration, and clearing a batch.
+`tests/test_v1_1.py` pins the v1.1 changes on development documents and includes regression checks on Tables 06 and 11. The other checks use development documents only. They cover known values, merged rows, shared cells, parent/source links, upload validation, encrypted/corrupt PDFs, preview rendering, JSON/ZIP downloads, duplicate filenames, partial batch failure, expiration, and clearing a batch.
 
 ## Application files and API
 
 - `app.py`: local FastAPI server, temporary upload storage, queue, downloads, and source page rendering.
-- `extractor/engine.py`: frozen deterministic extraction engine.
+- `extractor/engine.py`: deterministic extraction engine (parser version 1.1.0).
 - `static/`: responsive upload/review interface with Fields, Tables, JSON, and Text views.
 - `evaluate.py` and `evaluation/`: reproducible sampled holdout assessment.
 
