@@ -63,7 +63,7 @@ $('extract-button').addEventListener('click', async () => {
   selectedFiles.forEach(file => form.append('files', file));
   try {
     job = await api('/api/jobs', {method: 'POST', body: form});
-    sessionStorage.setItem('spec-extract-job', job.id);
+    sessionStorage.setItem('jags-al-job', job.id);
     selectedDocument = null;
     currentResult = null;
     resultCache.clear();
@@ -73,7 +73,7 @@ $('extract-button').addEventListener('click', async () => {
     pollFailures = 0;
     schedulePoll();
   } catch (error) { showError(error.message); renderSelection(); }
-  finally { $('extract-button').innerHTML = 'Extract JSON <span>↗</span>'; }
+  finally { $('extract-button').textContent = 'Extract'; }
 });
 
 function schedulePoll() {
@@ -106,10 +106,10 @@ async function renderBatch() {
   const done = job.documents.filter(d => d.status === 'complete');
   const failed = job.documents.filter(d => d.status === 'failed');
   const finished = ['complete', 'failed'].includes(job.status);
-  $('results-title').textContent = finished ? (done.length ? 'Your data is ready.' : 'Documents need attention.') : 'Reading every detail…';
+  $('results-title').textContent = finished ? (done.length ? 'Extraction complete' : 'Extraction failed') : 'Extracting…';
   const pages = done.reduce((sum, d) => sum + d.page_count, 0);
   const fields = done.reduce((sum, d) => sum + d.field_count, 0);
-  $('results-summary').textContent = finished ? `${done.length} document${done.length === 1 ? '' : 's'} extracted · ${pages} page${pages === 1 ? '' : 's'} · ${fields.toLocaleString()} fields${failed.length ? ` · ${failed.length} failed` : ''}` : `${done.length + failed.length} of ${job.documents.length} documents processed. You can review completed files while the rest are running.`;
+  $('results-summary').textContent = finished ? `${done.length} document${done.length === 1 ? '' : 's'} extracted · ${pages} page${pages === 1 ? '' : 's'} · ${fields.toLocaleString()} fields${failed.length ? ` · ${failed.length} failed` : ''}` : `${done.length + failed.length} of ${job.documents.length} documents processed. Completed documents can be reviewed now.`;
   $('clear-button').disabled = !finished;
   $('batch-download').classList.toggle('disabled', !finished || !done.length);
   $('batch-download').setAttribute('aria-disabled', String(!finished || !done.length));
@@ -118,10 +118,10 @@ async function renderBatch() {
   const active = job.documents.find(d => d.status === 'processing');
   const fraction = job.documents.reduce((sum, d) => sum + (['complete', 'failed'].includes(d.status) ? 1 : d.page_count ? d.pages_done / d.page_count : 0), 0) / job.documents.length;
   const percent = Math.round(fraction * 100);
-  $('progress-label').textContent = active ? `${active.filename} · ${active.pages_done} / ${active.page_count ?? '?'} pages` : 'Waiting in the local queue…';
+  $('progress-label').textContent = active ? `${active.filename} · ${active.pages_done} / ${active.page_count ?? '?'} pages` : 'Waiting in queue…';
   $('progress-percent').textContent = `${percent}%`;
   $('progress-bar').style.width = `${percent}%`;
-  $('document-list').innerHTML = job.documents.map(d => `<button class="doc-nav ${d.id === selectedDocument ? 'selected' : ''}" data-document="${d.id}" title="${escapeHtml(d.error || d.filename)}"><span class="doc-indicator ${d.status === 'failed' ? 'failed' : ''}"></span><div><strong>${escapeHtml(d.filename)}</strong><small>${d.status === 'complete' ? `${d.page_count} pages · ${d.field_count} fields` : escapeHtml(d.status)}</small></div></button>`).join('');
+  $('document-list').innerHTML = job.documents.map(d => `<button class="doc-nav ${d.id === selectedDocument ? 'selected' : ''}" data-document="${d.id}" title="${escapeHtml(d.error || d.filename)}"><span class="doc-indicator ${d.status === 'failed' ? 'failed' : ''}"></span><div><strong>${escapeHtml(d.filename)}</strong><small>${d.status === 'complete' ? `${d.page_count} page${d.page_count === 1 ? '' : 's'} · ${d.field_count} fields` : escapeHtml(d.status)}</small></div></button>`).join('');
   if (finished && failed.length) showError(failed.map(d => `${d.filename}: ${d.error}`).join(' '));
   if (selectedDocument === null && done.length) await selectDocument(done[0].id);
   else if (selectedDocument !== null && !currentResult && done.some(d => d.id === selectedDocument)) await selectDocument(selectedDocument);
@@ -148,14 +148,14 @@ async function selectDocument(id) {
     currentResult = result;
     currentPage = 1;
     $('document-name').textContent = doc.filename;
-    $('document-summary').textContent = `${doc.page_count} pages · ${doc.field_count} fields · ${doc.table_count} tables${result.document.standard ? ` · ${result.document.standard}` : ''}`;
+    $('document-summary').textContent = `${doc.page_count} page${doc.page_count === 1 ? '' : 's'} · ${doc.field_count} fields · ${doc.table_count} tables${result.document.standard ? ` · ${result.document.standard}` : ''}`;
     $('field-count').textContent = doc.field_count;
     $('json-download').href = `/api/jobs/${jobId}/documents/${id}/download`;
     $('page-select').innerHTML = result.pages.map(p => `<option value="${p.page_number}">Page ${p.page_number} of ${doc.page_count}</option>`).join('');
     const warnings = result.extraction.warnings;
     const multipleValues = result.fields.some(f => f.values.length > 1);
     $('review-notes').hidden = !warnings.length && !multipleValues;
-    $('review-notes').innerHTML = (multipleValues ? '<div>For multiple values, verify variant names and empty cells against the original table.</div>' : '') + (warnings.length ? `<details><summary>${warnings.length} review note${warnings.length === 1 ? '' : 's'} · Check pages with images, limited text, or unruled content.</summary><ul>${warnings.map(w => `<li>Page ${w.source_page}: ${escapeHtml(w.message)}</li>`).join('')}</ul></details>` : '');
+    $('review-notes').innerHTML = (multipleValues ? '<div>Some fields have several values. Check variant labels and empty cells against the source table.</div>' : '') + (warnings.length ? `<details><summary>${warnings.length} review note${warnings.length === 1 ? '' : 's'} (images, little text, or no ruled table)</summary><ul>${warnings.map(w => `<li>Page ${w.source_page}: ${escapeHtml(w.message)}</li>`).join('')}</ul></details>` : '');
     $('field-search').value = '';
     $('review').hidden = false;
     showPage(1);
@@ -210,11 +210,11 @@ function renderData() {
   }
   if (currentTab === 'tables') {
     const tables = currentResult.pages[currentPage - 1].tables;
-    if (!tables.length) { view.innerHTML = '<div class="no-data">No ruled table was detected on this page. Check the Text view and original page.</div>'; return; }
+    if (!tables.length) { view.innerHTML = '<div class="no-data">No ruled table on this page. See the Text tab.</div>'; return; }
     view.innerHTML = `<div class="table-picker"><label for="table-select">Table</label><select id="table-select">${tables.map((t, i) => `<option value="${i}">${escapeHtml(t.id)} · ${t.row_count} rows × ${t.column_count} columns${t.role === 'footer' ? ' · footer' : ''}</option>`).join('')}</select></div><div id="raw-table-view"></div>`;
     const renderTable = index => {
       const t = tables[index];
-      $('raw-table-view').innerHTML = `<div class="table-scroll"><table class="raw-table" aria-label="${escapeHtml(t.id)}">${t.rows.map((row, r) => `<tr>${t.cells.filter(c => c.row === r).map(c => `<td rowspan="${c.row_span}" colspan="${c.column_span}">${escapeHtml(c.text)}</td>`).join('')}</tr>`).join('')}</table></div><div class="table-caption">Original cell layout, including merged rows and columns. Empty cells and placeholders are preserved in the JSON.</div>`;
+      $('raw-table-view').innerHTML = `<div class="table-scroll"><table class="raw-table" aria-label="${escapeHtml(t.id)}">${t.rows.map((row, r) => `<tr>${t.cells.filter(c => c.row === r).map(c => `<td rowspan="${c.row_span}" colspan="${c.column_span}">${escapeHtml(c.text)}</td>`).join('')}</tr>`).join('')}</table></div><div class="table-caption">Cell layout as detected, including merged rows and columns.</div>`;
     };
     $('table-select').addEventListener('change', event => renderTable(Number(event.target.value)));
     renderTable(0);
@@ -223,8 +223,8 @@ function renderData() {
   const query = $('field-search').value.toLocaleLowerCase();
   const thisPage = $('current-page-only').checked;
   const fields = currentResult.fields.filter(f => (!thisPage || f.source_page === currentPage || f.values.some(v => v.source_page === currentPage)) && (!query || `${f.field_id || ''} ${f.description} ${f.values.map(v => v.text).join(' ')}`.toLocaleLowerCase().includes(query)));
-  if (!fields.length) { view.innerHTML = `<div class="no-data">${currentResult.fields.length ? 'No fields match your search or page filter.' : 'No structured fields were detected. Review the original page, tables, and text.'}</div>`; return; }
-  view.innerHTML = `<table class="fields-table"><thead><tr><th>FIELD ID</th><th>DESCRIPTION</th><th>VALUE</th><th>PAGE</th></tr></thead><tbody>${fields.map(f => `<tr class="${f.kind === 'section' ? 'section' : ''}"><td>${escapeHtml(f.field_id || '—')}</td><td>${escapeHtml(f.description)}${f.continuation_rows.length ? `<div class="continuation">+ ${f.continuation_rows.length} continuation row${f.continuation_rows.length === 1 ? '' : 's'} in JSON / tables</div>` : ''}</td><td>${f.values.length ? f.values.map(v => `<div class="value">${v.column_label || v.row_label ? `<span class="value-label">${escapeHtml([v.row_label, v.column_label].filter(Boolean).join(' · '))}</span>` : ''}${v.text ? escapeHtml(v.text) : '<span class="blank-value">Empty cell</span>'}</div>`).join('') : '<span class="blank-value">No value cell</span>'}</td><td><button class="field-page" data-page="${f.source_page}" aria-label="Show source page ${f.source_page}">${f.source_page}</button></td></tr>`).join('')}</tbody></table>`;
+  if (!fields.length) { view.innerHTML = `<div class="no-data">${currentResult.fields.length ? 'No fields match your search or page filter.' : 'No fields detected. Check the Tables and Text tabs.'}</div>`; return; }
+  view.innerHTML = `<table class="fields-table"><thead><tr><th>Field ID</th><th>Description</th><th>Value</th><th>Page</th></tr></thead><tbody>${fields.map(f => `<tr class="${f.kind === 'section' ? 'section' : ''}"><td>${escapeHtml(f.field_id || '—')}</td><td>${escapeHtml(f.description)}${f.continuation_rows.length ? `<div class="continuation">+ ${f.continuation_rows.length} continuation row${f.continuation_rows.length === 1 ? '' : 's'}</div>` : ''}</td><td>${f.values.length ? f.values.map(v => `<div class="value">${v.column_label || v.row_label ? `<span class="value-label">${escapeHtml([v.row_label, v.column_label].filter(Boolean).join(' · '))}</span>` : ''}${v.text ? escapeHtml(v.text) : '<span class="blank-value">Empty cell</span>'}</div>`).join('') : '<span class="blank-value">No value cell</span>'}</td><td><button class="field-page" data-page="${f.source_page}" aria-label="Show source page ${f.source_page}">${f.source_page}</button></td></tr>`).join('')}</tbody></table>`;
 }
 $('data-view').addEventListener('click', event => {
   const button = event.target.closest('[data-page]');
@@ -236,7 +236,7 @@ $('clear-button').addEventListener('click', async () => {
   try { await api(`/api/jobs/${job.id}`, {method: 'DELETE'}); }
   catch (error) { showError(error.message); $('clear-button').disabled = false; return; }
   clearTimeout(pollTimer);
-  sessionStorage.removeItem('spec-extract-job');
+  sessionStorage.removeItem('jags-al-job');
   job = null; currentResult = null; selectedDocument = null; resultCache.clear();
   $('results').hidden = true; $('review').hidden = true; $('batch-nav').hidden = true; $('empty-state').hidden = false;
   document.body.classList.remove('compact');
@@ -245,9 +245,9 @@ $('clear-button').addEventListener('click', async () => {
   renderSelection();
 });
 async function restore() {
-  const id = sessionStorage.getItem('spec-extract-job');
+  const id = sessionStorage.getItem('jags-al-job');
   if (!id) return;
   try { job = await api(`/api/jobs/${id}`); await renderBatch(); schedulePoll(); }
-  catch { sessionStorage.removeItem('spec-extract-job'); }
+  catch { sessionStorage.removeItem('jags-al-job'); }
 }
 restore();
