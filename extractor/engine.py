@@ -1,0 +1,276 @@
+"""Read native PDF text and ruled tables without inventing missing values.
+
+The raw page text and table cell geometry are the source of truth. The fields
+view is a convenient interpretation of those cells, not an OCR transcription.
+"""
+from __future__ import annotations
+
+from collections import Counter
+from datetime import datetime, timezone
+import hashlib
+from pathlib import Path
+import re
+from typing import Callable
+
+import pdfplumber
+
+PARSER_VERSION = "1.0.0"
+MAX_PAGES = 200
+CODE = re.compile(r"^((?:[A-Z]\s*)?\d+(?:\s*\.\s*\d+)+)\s*\.?(?:\s+[A-Z]\.)?$")
+REFERENCE = re.compile(r"\b(?:Refer\s+)?(?:Annexure|Annex|Enclosure|Appendix)\s*[–\-:]?\s*[A-Z0-9]+(?:\s*[–\-]\s*[A-Z0-9]+)?", re.I)
+
+
+class ExtractionError(ValueError):
+    pass
+
+
+def clean(value: str | None) -> str:
+    return "\n".join(line.strip() for line in (value or "").splitlines()).strip()
+
+
+def field_code(text: str) -> str | None:
+    match = CODE.fullmatch(clean(text))
+    return re.sub(r"\s+", "", match.group(1)).rstrip(".") if match else None
+
+
+def bbox(box) -> list[float]:
+    return [round(float(v), 3) for v in box]
+
+
+def _table_data(table, page_number: int, index: int) -> dict:
+    matrix = [[clean(v) if v is not None else None for v in row] for row in table.extract()]
+    xs = sorted({round(v, 4) for c in table.cells for v in (c[0], c[2])})
+    ys = sorted({round(v, 4) for c in table.cells for v in (c[1], c[3])})
+    cells = []
+    for row_index, row in enumerate(table.rows):
+        for col_index, box in enumerate(row.cells):
+            if box is None:
+                continue
+            x0, y0, x1, y1 = box
+            cells.append({
+                "row": row_index, "column": col_index,
+                "row_span": sum(y0 - .01 <= y < y1 - .01 for y in ys),
+                "column_span": sum(x0 - .01 <= x < x1 - .01 for x in xs),
+                "text": matrix[row_index][col_index], "bbox": bbox(box),
+            })
+    return {"id": f"p{page_number}-t{index}", "source_page": page_number,
+            "bbox": bbox(table.bbox), "role": "content", "rows": matrix,
+            "row_count": len(matrix), "column_count": len(table.columns), "cells": cells}
+
+
+def _active_cells(table: dict, row_index: int) -> list[dict]:
+    owners = [c for c in table["cells"] if c["row"] == row_index]
+    if not owners:
+        return []
+    middle = min(c["bbox"][1] for c in owners) + .05
+    return sorted((c for c in table["cells"] if c["bbox"][1] <= middle < c["bbox"][3]),
+                  key=lambda c: c["bbox"][0])
+
+
+def _is_footer(cells: list[dict]) -> bool:
+    text = " ".join(c["text"] for c in cells).lower()
+    return "manufacturer:" in text and ("test agency" in text or "signature, name" in text)
+
+
+def _is_title(cells: list[dict]) -> bool:
+    text = " ".join(c["text"] for c in cells)
+    return bool(re.search(r"\bTable\s+\d+[A-Z]?\s+of\s+AIS", text, re.I))
+
+
+def _value(cell: dict, table: dict, row_index: int, label: str | None = None,
+           row_label: str | None = None) -> dict:
+    return {"text": cell["text"], "column_label": label, "row_label": row_label,
+            "source_page": table["source_page"], "bbox": cell["bbox"],
+            "inherited_from_merged_cell": cell["row"] != row_index,
+            "source_cell": {"table_id": table["id"], "row": cell["row"], "column": cell["column"]}}
+
+
+def _interpret_table(table: dict, records: list[dict], context: dict) -> None:
+    rows = [_active_cells(table, r) for r in range(table["row_count"])]
+    if rows and _is_footer(rows[0]):
+        table["role"] = "footer"
+        return
+    code_rows = []
+    for r, cells in enumerate(rows):
+        nonempty = [c for c in cells if c["text"]]
+        if nonempty and field_code(nonempty[0]["text"]):
+            code_rows.append((r, nonempty[0], cells))
+    coded = bool(code_rows)
+    # Use the repeated description/value boundary, rather than a column index:
+    # Word-generated PDFs introduce narrow spacer columns and split cells.
+    boundaries = []
+    for _, code_cell, cells in code_rows:
+        after = [c for c in cells if c["bbox"][0] >= code_cell["bbox"][2] - .1]
+        desc = next((c for c in after if c["text"]), None)
+        if desc and desc["bbox"][2] < table["bbox"][2] - 5:
+            boundaries.append(round(desc["bbox"][2], 1))
+    value_x = Counter(boundaries).most_common(1)[0][0] if boundaries else None
+    headers: list[dict] = []
+    previous = context.get("previous") if coded else None
+    for row_index, cells in enumerate(rows):
+        if _is_footer(cells):
+            # Some PDFs connect the signature block to the main table.
+            # Everything after this row is footer content, retained in raw tables.
+            break
+        if _is_title(cells):
+            continue
+        nonempty = [c for c in cells if c["text"]]
+        if not nonempty:
+            continue
+        code_cell = nonempty[0] if field_code(nonempty[0]["text"]) else None
+        if coded and (not code_cell or code_cell["row"] != row_index):
+            if previous:
+                own = [c for c in cells if c["row"] == row_index and c["text"]]
+                previous["continuation_rows"].append({
+                    "source_page": table["source_page"], "table_id": table["id"],
+                    "row": row_index, "cells": [c["text"] for c in own],
+                })
+                # Expand true row-spanning labels (e.g. CC, FSD and HSD).
+                desc_box = context.get("description_bbox")
+                if code_cell and desc_box and any(c["bbox"] == desc_box for c in cells):
+                    right = [c for c in cells if value_x is not None and c["bbox"][0] >= value_x - .2]
+                    row_label = " / ".join(c["text"] for c in own if desc_box[2] - .2 <= c["bbox"][0] < (value_x or 0) - .2) or None
+                    previous["values"].extend(_value(c, table, row_index, _header(c, headers), row_label) for c in right)
+            continue
+        if code_cell:
+            code = field_code(code_cell["text"])
+            after = [c for c in cells if c["bbox"][0] >= code_cell["bbox"][2] - .1]
+            description = next((c for c in after if c["text"]), None)
+            if description is None:
+                continue
+        else:
+            code = None
+            description = nonempty[0]
+        right = [c for c in cells if c["bbox"][0] >= description["bbox"][2] - .1]
+        # Ignore zero-width spacer columns and trailing blank cells.
+        right = [c for c in right if c["bbox"][2] - c["bbox"][0] > 6]
+        if coded and value_x is not None:
+            row_labels = [c for c in right if c["bbox"][0] < value_x - .2]
+            right = [c for c in right if c["bbox"][0] >= value_x - .2]
+        else:
+            row_labels = []
+        row_label = " / ".join(c["text"] for c in row_labels if c["text"]) or None
+        is_section = bool(code and code.endswith(".0")) or not any(c["text"] for c in right)
+        if code and code.endswith(".0"):
+            headers = []
+        if is_section and len(right) > 1 and any(re.search(r"\b(?:WB|GVW|variant|gear|ratio)\b", c["text"], re.I) for c in right):
+            headers = right
+        record = {
+            "id": f"f{len(records) + 1:05d}", "field_id": code,
+            "parent_id": None, "level": len(code.split(".")) if code else 1,
+            "kind": "section" if is_section else "field", "description": description["text"],
+            "values": [_value(c, table, row_index, None if is_section else _header(c, headers), row_label) for c in right],
+            "source_page": table["source_page"], "table_id": table["id"], "row": row_index,
+            "bbox": bbox((min(c["bbox"][0] for c in cells), min(c["bbox"][1] for c in cells),
+                          max(c["bbox"][2] for c in cells), max(c["bbox"][3] for c in cells))),
+            "continuation_rows": [], "references": [],
+        }
+        records.append(record)
+        previous = record
+        context.update(previous=record, description_bbox=description["bbox"])
+
+
+def _header(cell: dict, headers: list[dict]) -> str | None:
+    for header in headers:
+        left = max(header["bbox"][0], cell["bbox"][0])
+        right = min(header["bbox"][2], cell["bbox"][2])
+        width = max(header["bbox"][2] - header["bbox"][0], cell["bbox"][2] - cell["bbox"][0])
+        if width > 0 and (right - left) / width > .8:
+            return header["text"]
+    return None
+
+
+def _hierarchy(records: list[dict]) -> None:
+    seen: dict[str, dict] = {}
+    section = None
+    for record in records:
+        code = record["field_id"]
+        if code:
+            parts = code.split(".")
+            # A1.1 belongs to A1.0; 1.2.1 belongs to 1.2, then 1.0.
+            candidates = [".".join(parts[:i]) for i in range(len(parts) - 1, 0, -1)]
+            parent = next((seen[k] for stem in candidates for k in (stem, stem + ".0") if k in seen), None)
+            if parent:
+                record["parent_id"] = parent["id"]
+                record["level"] = parent["level"] + 1
+            else:
+                record["level"] = 1
+            seen[code] = record
+        elif section:
+            record["parent_id"] = section["id"]
+            record["level"] = section["level"] + 1
+        if record["kind"] == "section":
+            section = record
+        text = record["description"] + " " + " ".join(v["text"] for v in record["values"])
+        record["references"] = list(dict.fromkeys(m.group(0) for m in REFERENCE.finditer(text)))
+
+
+def _text_fields(text: str, page_number: int, records: list[dict]) -> None:
+    # Unruled text fallback is deliberately marked for review in the result.
+    for line in text.splitlines():
+        match = re.match(r"^((?:[A-Z]\s*)?\d+(?:\.\d+)+)\.?\s+(.+)$", line)
+        if not match:
+            continue
+        records.append({"id": f"f{len(records) + 1:05d}", "field_id": match.group(1),
+                        "parent_id": None, "level": 1, "kind": "field", "description": match.group(2),
+                        "values": [], "source_page": page_number, "table_id": None, "row": None,
+                        "bbox": None, "continuation_rows": [], "references": []})
+
+
+def extract_pdf(path: str | Path, filename: str | None = None,
+                progress: Callable[[int, int], None] | None = None) -> dict:
+    path = Path(path)
+    try:
+        pdf = pdfplumber.open(path)
+    except Exception as exc:
+        raise ExtractionError("This PDF cannot be read. It may be damaged or password protected.") from exc
+    pages, records, warnings = [], [], []
+    context: dict = {}
+    with pdf:
+        count = len(pdf.pages)
+        if not 1 <= count <= MAX_PAGES:
+            raise ExtractionError(f"Upload a PDF with 1 to {MAX_PAGES} pages.")
+        for number, page in enumerate(pdf.pages, 1):
+            raw_text = page.extract_text(x_tolerance=2, y_tolerance=3) or ""
+            page_warnings = []
+            tables = [_table_data(t, number, i) for i, t in enumerate(page.find_tables(), 1)]
+            for table in tables:
+                _interpret_table(table, records, context)
+            content_tables = [t for t in tables if t["role"] == "content"]
+            if not content_tables and len(raw_text.strip()) >= 40:
+                _text_fields(raw_text, number, records)
+                page_warnings.append("No ruled content table detected. Use raw text to review this page.")
+            requires_ocr = len(raw_text.strip()) < 40
+            if requires_ocr:
+                page_warnings.append("Little or no selectable text. OCR is required to transcribe this page.")
+            images = [{"id": f"p{number}-image{i}", "bbox": bbox((im["x0"], im["top"], im["x1"], im["bottom"])),
+                       "transcribed": False} for i, im in enumerate(page.images, 1)]
+            if images:
+                page_warnings.append("Embedded images are referenced by location; their visual content is not transcribed.")
+            pages.append({"page_number": number, "width": round(page.width, 3), "height": round(page.height, 3),
+                          "raw_text": raw_text, "tables": tables, "images": images,
+                          "requires_ocr": requires_ocr, "warnings": page_warnings})
+            warnings.extend({"source_page": number, "message": w} for w in page_warnings)
+            if progress:
+                progress(number, count)
+            page.close()
+    _hierarchy(records)
+    first_text = pages[0]["raw_text"]
+    table_match = re.search(r"Table\s+(\d+[A-Z]?)\s+of\s+AIS[\s-]*0*07", first_text, re.I)
+    part_match = re.search(r"PART\s+([A-Z])\s*[–-]\s*([^\n]+)", first_text)
+    date_match = re.search(r"Date:\s*(\d{1,2}[./]\d{1,2}[./]\d{4})", first_text)
+    return {
+        "schema_version": "1.0", "parser_version": PARSER_VERSION,
+        "document": {"filename": filename or path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                     "page_count": len(pages), "table_number": table_match.group(1) if table_match else None,
+                     "standard": "AIS-007" if table_match else None,
+                     "part": part_match.group(1) if part_match else None,
+                     "title": part_match.group(2).strip() if part_match else next((line for line in first_text.splitlines() if "SPECIFICATION" in line or "DETAILS OF" in line), None),
+                     "document_date": date_match.group(1) if date_match else None},
+        "extraction": {"method": "native_text_and_ruled_tables", "generated_at": datetime.now(timezone.utc).isoformat(),
+                       "status": "needs_review" if warnings else "complete", "field_count": len(records),
+                       "table_count": sum(len(p["tables"]) for p in pages),
+                       "requires_ocr_pages": [p["page_number"] for p in pages if p["requires_ocr"]],
+                       "warnings": warnings},
+        "fields": records, "pages": pages,
+    }

@@ -1,0 +1,1066 @@
+{
+  "frozen_parser": {
+    "parser_version": "1.0.0",
+    "engine_sha256": "2a71363040bfabe4ddd197eead6b8e3701905821f91fc9080f1d45a3c1cf3f64",
+    "frozen_at": "2026-09-30T15:15:37.991673+00:00",
+    "policy": "Frozen after development tests and before reading holdout pages for ground truth. Earlier first-page triage is disclosed in dataset_manifest.json. Do not modify the engine based on this holdout run."
+  },
+  "ground_truth_sha256": "bf0332c35807dd40eca5eb36ad08fddc7337de12f24b9dc6f4c1ec3eb09b97fc",
+  "method": "Expected values transcribed from original PDF text and rendered source pages before running the frozen extractor on holdout. Whitespace is normalized; spelling, case, punctuation, units, value order, and placeholders must match.",
+  "limitations": "This is a purposive sample of field values and table cells, not a complete annotation of every field. First pages had been inspected during pre-split triage. No parser tuning used these documents after the split. Variant-label checks are reported separately.",
+  "documents": [
+    {
+      "filename": "Table 06_Ver.01.pdf",
+      "sha256": "4668f5c2028c7d75d5e0a1c8a0507da32a0252730715144b192c2d761957980b",
+      "expected_pages": 12,
+      "processed_pages": 12,
+      "field_count": 433,
+      "table_count": 21,
+      "checks": [
+        {
+          "expected": {
+            "page": 1,
+            "field_id": "E1.1",
+            "description_contains": "Type & number",
+            "values": [
+              "Lead Acid Battery & 1 Number"
+            ]
+          },
+          "actual": [
+            "Lead Acid Battery & 1 Number"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 1,
+            "field_id": "E1.2",
+            "values": [
+              "12V"
+            ]
+          },
+          "actual": [
+            "12V"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 1,
+            "field_id": "E1.3",
+            "values": [
+              "50 Ah"
+            ]
+          },
+          "actual": [
+            "50 Ah"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 1,
+            "field_id": "E2.3.6",
+            "values": [
+              "62±8 rpm"
+            ]
+          },
+          "actual": [
+            "62±8 rpm"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 1,
+            "field_id": "E2.3.7",
+            "values": [
+              "40±5 rpm"
+            ]
+          },
+          "actual": [
+            "40±5 rpm"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 1,
+            "field_id": "E2.6.4",
+            "values": [
+              "1.5Ltr"
+            ]
+          },
+          "actual": [
+            "1.5Ltr"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 1,
+            "field_id": "E2.6.6.2",
+            "values": [
+              "PEAD64XYZS00"
+            ]
+          },
+          "actual": [
+            "PEAD64XYZS00"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 1,
+            "field_id": "E2.7.2.4.1",
+            "values": [
+              "-"
+            ]
+          },
+          "actual": [
+            "-"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 2,
+            "field_id": "E3.4",
+            "values": [
+              "CXU105"
+            ]
+          },
+          "actual": [
+            "CXU105"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 2,
+            "field_id": "E4.2.1",
+            "values": [
+              "0"
+            ]
+          },
+          "actual": [
+            "0"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 2,
+            "field_id": "E4.2.2",
+            "values": [
+              "-1.70%"
+            ]
+          },
+          "actual": [
+            "-1.70%"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 2,
+            "field_id": "E5.1.3",
+            "values": [
+              "ALSS4 / E9-2ZXYZ8"
+            ]
+          },
+          "actual": [
+            "ALSS4 / E9-2ZXYZ8"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 2,
+            "field_id": "E5.3.1",
+            "values": [
+              "--"
+            ]
+          },
+          "actual": [
+            "--"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 3,
+            "field_id": "E5.4",
+            "values": [
+              "NO"
+            ]
+          },
+          "actual": [
+            "NO"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 3,
+            "field_id": "E6.0",
+            "values": [
+              "NA"
+            ]
+          },
+          "actual": [
+            "NA"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 3,
+            "field_id": "E9.2",
+            "values": [
+              "AA2XY4"
+            ]
+          },
+          "actual": [
+            "AA2XY4"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 3,
+            "field_id": "E10.1.3",
+            "values": [
+              "Two, Amber"
+            ]
+          },
+          "actual": [
+            "Two, Amber"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 3,
+            "field_id": "E11.0",
+            "values": [
+              "Integrated in Rear Combination Lamp"
+            ]
+          },
+          "actual": [
+            "Integrated in Rear Combination Lamp"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 4,
+            "field_id": "E12.2",
+            "values": [
+              "AAXY64"
+            ]
+          },
+          "actual": [
+            "AAXY64"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 4,
+            "field_id": "E14.3",
+            "values": [
+              "One & White"
+            ]
+          },
+          "actual": [
+            "One & White"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 4,
+            "field_id": "E15.3.1",
+            "values": [
+              "M/s. XYZZ Industries Limited",
+              "M/s. XYZ Limited"
+            ]
+          },
+          "actual": [
+            "M/s. XYZZ Industries Limited",
+            "M/s. XYZ Limited"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 4,
+            "field_id": "E15.3.2",
+            "values": [
+              "C90756",
+              "E4 61712"
+            ]
+          },
+          "actual": [
+            "C90756",
+            "E4 61712"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 4,
+            "field_id": "E16.3.3",
+            "values": [
+              "Two, Amber",
+              "Two, Amber"
+            ]
+          },
+          "actual": [
+            "Two, Amber",
+            "Two, Amber"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 4,
+            "field_id": "E17.1.5",
+            "values": [
+              "34 cm2"
+            ]
+          },
+          "actual": [
+            "34 cm2"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 5,
+            "field_id": "E17.1.6",
+            "values": [
+              "Round"
+            ]
+          },
+          "actual": [
+            "Round"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 5,
+            "field_id": "E17.2.5",
+            "values": [
+              "24.3 cm2"
+            ]
+          },
+          "actual": [
+            "24.3 cm2"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 5,
+            "field_id": "E18.0",
+            "values": [
+              "NA"
+            ]
+          },
+          "actual": [
+            "NA"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 5,
+            "field_id": "E19.1.1",
+            "empty_value": true
+          },
+          "actual": [
+            ""
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 6,
+            "field_id": "E19.2.1",
+            "empty_value": true
+          },
+          "actual": [
+            ""
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 6,
+            "field_id": "E19.12.3",
+            "empty_value": true
+          },
+          "actual": [
+            ""
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 6,
+            "field_id": "E19.13",
+            "values": [
+              "NA"
+            ]
+          },
+          "actual": [
+            "NA"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 7,
+            "field_id": "E20.1",
+            "values": [
+              "M/s. XXYYZZ Pvt Ltd"
+            ]
+          },
+          "actual": [
+            "M/s. XXYYZZ Pvt Ltd"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 7,
+            "field_id": "E20.2",
+            "values": [
+              "V9XYZ1"
+            ]
+          },
+          "actual": [
+            "V9XYZ1"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 7,
+            "field_id": "E21.2",
+            "values": [
+              "20 mm"
+            ]
+          },
+          "actual": [
+            "20 mm"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 7,
+            "field_id": "E21.4",
+            "values": [
+              "VFT01XYZ"
+            ]
+          },
+          "actual": [
+            "VFT01XYZ"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 7,
+            "field_id": "E22.0",
+            "values": [
+              "Refer Annexure 6A"
+            ]
+          },
+          "actual": [
+            "Refer Annexure 6A"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 8,
+            "field_id": "E23.1",
+            "values": [
+              "Jay Switches"
+            ]
+          },
+          "actual": [
+            "Jay Switches"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 8,
+            "field_id": "E23.1.1",
+            "values": [
+              "FKXYZS00"
+            ]
+          },
+          "actual": [
+            "FKXYZS00"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 8,
+            "field_id": "E23.3",
+            "values": [
+              "Locks the Steering"
+            ]
+          },
+          "actual": [
+            "Locks the Steering"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 8,
+            "field_id": "E23.4",
+            "values": [
+              "Mechanical"
+            ]
+          },
+          "actual": [
+            "Mechanical"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 8,
+            "field_id": "E23.6",
+            "values": [
+              "NO"
+            ]
+          },
+          "actual": [
+            "NO"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 9,
+            "field_id": "E28.2",
+            "values": [
+              "B0CXYZ02",
+              "B0C12XYZ1",
+              "B0XYZ202"
+            ]
+          },
+          "actual": [
+            "B0CXYZ02",
+            "B0C12XYZ1",
+            "B0XYZ202"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 9,
+            "field_id": "E28.4",
+            "values": [
+              "NA",
+              "NA",
+              "4 kW"
+            ]
+          },
+          "actual": [
+            "NA",
+            "",
+            "NA",
+            "4 kW"
+          ],
+          "passed": false
+        },
+        {
+          "expected": {
+            "page": 9,
+            "field_id": "E29.4",
+            "values": [
+              "4",
+              "4",
+              "4"
+            ]
+          },
+          "actual": [
+            "4",
+            "",
+            "4",
+            "4"
+          ],
+          "passed": false
+        },
+        {
+          "expected": {
+            "page": 9,
+            "field_id": "E31.2",
+            "values": [
+              "Sensor"
+            ]
+          },
+          "actual": [
+            "Sensor"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 9,
+            "field_id": "E31.4",
+            "values": [
+              "XYZ Automotive Ltd"
+            ]
+          },
+          "actual": [
+            "XYZ Automotive Ltd"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 9,
+            "field_id": "E31.8",
+            "values": [
+              "NA"
+            ]
+          },
+          "actual": [
+            "NA"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 10,
+            "field_id": "E31.10",
+            "values": [
+              "--"
+            ]
+          },
+          "actual": [
+            "--"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 10,
+            "field_id": "1.0",
+            "description_contains": "Description of the VAS",
+            "values": [
+              "-"
+            ]
+          },
+          "actual": [
+            "-"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 10,
+            "field_id": "1.12",
+            "values": [
+              "-"
+            ],
+            "occurrence": 1
+          },
+          "actual": [
+            "-"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 10,
+            "field_id": "2.0",
+            "description_contains": "Description of the Immobilizer",
+            "values": [
+              "-"
+            ]
+          },
+          "actual": [
+            "-"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 11,
+            "field_id": "2.4",
+            "values": [
+              "-"
+            ]
+          },
+          "actual": [
+            "-"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 11,
+            "field_id": "3.1",
+            "description_contains": "Instructions for use",
+            "values": [
+              "-"
+            ]
+          },
+          "actual": [
+            "-"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 11,
+            "field_id": "3.2",
+            "values": [
+              "-"
+            ]
+          },
+          "actual": [
+            "-"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 12,
+            "type": "table_cell",
+            "table_contains": "Test Report Number",
+            "row_label": "1",
+            "value_index": 1,
+            "expected": "ECU"
+          },
+          "actual": "ECU",
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 12,
+            "type": "table_cell",
+            "table_contains": "Test Report Number",
+            "row_label": "7",
+            "value_index": 1,
+            "expected": "Front Wiper Motor"
+          },
+          "actual": "Front Wiper Motor",
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 12,
+            "type": "table_cell",
+            "table_contains": "Test Report Number",
+            "row_label": "8",
+            "value_index": 1,
+            "expected": "Hazard/ Flasher Controller"
+          },
+          "actual": "Hazard/ Flasher\nController",
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 12,
+            "type": "table_cell",
+            "table_contains": "Test Report Number",
+            "row_label": "17",
+            "value_index": 1,
+            "expected": "Blower"
+          },
+          "actual": "Blower",
+          "passed": true
+        }
+      ],
+      "variant_label_checks": [
+        {
+          "expected": {
+            "page": 4,
+            "field_id": "E15.3.2",
+            "labels": [
+              "Provided Category - 5",
+              "Provided Category - 6"
+            ]
+          },
+          "actual": [
+            null,
+            null
+          ],
+          "passed": false
+        },
+        {
+          "expected": {
+            "page": 9,
+            "field_id": "E28.4",
+            "labels": [
+              "Blower",
+              "Low-Cost Heater",
+              "AC"
+            ]
+          },
+          "actual": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "passed": false
+        }
+      ],
+      "review_notes": []
+    },
+    {
+      "filename": "Table 11_Ver.01.pdf",
+      "sha256": "aa0bfd6075126942a3ed7eedbaff9b1361e43a2efe4874db44b64be088d37e10",
+      "expected_pages": 2,
+      "processed_pages": 2,
+      "field_count": 40,
+      "table_count": 5,
+      "checks": [
+        {
+          "expected": {
+            "page": 1,
+            "description_contains": "Name of the Vehicle Manufacturer & Address",
+            "values": [
+              "Ashok Leyland Ltd, 1, Sardar Patel Road, Guindy, Chennai – 600 032."
+            ]
+          },
+          "actual": [
+            "Ashok Leyland Ltd,\n1, Sardar Patel Road, Guindy, Chennai – 600 032."
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 1,
+            "description_contains": "Name of the basic model",
+            "values": [
+              "BADA DOST i9 TNZX"
+            ]
+          },
+          "actual": [
+            "BADA DOST i9 TNZX"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 1,
+            "description_contains": "Name of Variants",
+            "values": [
+              "BADA DOST i8 TNZX"
+            ]
+          },
+          "actual": [
+            "BADA DOST i8 TNZX"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 1,
+            "description_contains": "Place of Embossing",
+            "values": [
+              "On LH frame between Bump Stop Mounting bracket and Rear Suspension Rear mounting bracket Assy. 500XYZVA5A"
+            ]
+          },
+          "actual": [
+            "On LH frame between Bump Stop Mounting bracket and Rear Suspension Rear\nmounting bracket Assy. 500XYZVA5A"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 1,
+            "description_contains": "Place of PIN Verification",
+            "values": [
+              "NA"
+            ]
+          },
+          "actual": [
+            "NA"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 1,
+            "description_contains": "Place of Local information",
+            "values": [
+              "NA"
+            ]
+          },
+          "actual": [
+            "NA"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 2,
+            "description_contains": "Height of the Chassis number",
+            "values": [
+              "Min. 7 mm on Chassis frame; Min. 4 mm on Manufacturers plate"
+            ]
+          },
+          "actual": [
+            "Min. 7 mm on Chassis frame;\nMin. 4 mm on Manufacturers plate"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 2,
+            "description_contains": "Example of Engine No",
+            "values": [
+              "HJEZXYZ891"
+            ]
+          },
+          "actual": [
+            "HJEZXYZ891"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 2,
+            "description_contains": "Example of Chassis No.",
+            "values": [
+              "XYZABCGCD0JRDX737"
+            ]
+          },
+          "actual": [
+            "XYZABCGCD0JRDX737"
+          ],
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 2,
+            "type": "table_cell",
+            "table_contains": "YEAR",
+            "row_label": "CODE",
+            "occurrence": 1,
+            "value_index": 1,
+            "expected": "T"
+          },
+          "actual": "T",
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 2,
+            "type": "table_cell",
+            "table_contains": "YEAR",
+            "row_label": "CODE",
+            "occurrence": 2,
+            "value_index": 15,
+            "expected": "S"
+          },
+          "actual": "S",
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 2,
+            "type": "table_cell",
+            "table_contains": "JAN",
+            "row_label": "JAN",
+            "occurrence": 1,
+            "value_index": 1,
+            "expected": "S"
+          },
+          "actual": "S",
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 2,
+            "type": "table_cell",
+            "table_contains": "JAN",
+            "row_label": "JAN",
+            "occurrence": 1,
+            "value_index": 14,
+            "expected": "N"
+          },
+          "actual": "N",
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 2,
+            "type": "table_cell",
+            "table_contains": "JAN",
+            "row_label": "SEP",
+            "occurrence": 1,
+            "value_index": 14,
+            "expected": "Z"
+          },
+          "actual": "Z",
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 2,
+            "type": "table_cell",
+            "table_contains": "JAN",
+            "row_label": "SEP",
+            "occurrence": 2,
+            "value_index": 14,
+            "expected": "D"
+          },
+          "actual": "D",
+          "passed": true
+        },
+        {
+          "expected": {
+            "page": 2,
+            "type": "table_cell",
+            "table_contains": "JAN",
+            "row_label": "DEC",
+            "occurrence": 2,
+            "value_index": 15,
+            "expected": "T"
+          },
+          "actual": "T",
+          "passed": true
+        }
+      ],
+      "variant_label_checks": [],
+      "review_notes": [
+        {
+          "source_page": 1,
+          "message": "Embedded images are referenced by location; their visual content is not transcribed."
+        },
+        {
+          "source_page": 2,
+          "message": "Embedded images are referenced by location; their visual content is not transcribed."
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "value_checks_passed": 72,
+    "value_checks_total": 74,
+    "sampled_value_accuracy_percent": 97.3,
+    "variant_label_checks_passed": 0,
+    "variant_label_checks_total": 2,
+    "pages_processed": 14,
+    "expected_pages": 14
+  }
+}

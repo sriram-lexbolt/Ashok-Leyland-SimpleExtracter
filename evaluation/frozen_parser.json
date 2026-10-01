@@ -1,0 +1,6 @@
+{
+  "parser_version": "1.0.0",
+  "engine_sha256": "2a71363040bfabe4ddd197eead6b8e3701905821f91fc9080f1d45a3c1cf3f64",
+  "frozen_at": "2026-09-30T15:15:37.991673+00:00",
+  "policy": "Frozen after development tests and before reading holdout pages for ground truth. Earlier first-page triage is disclosed in dataset_manifest.json. Do not modify the engine based on this holdout run."
+}

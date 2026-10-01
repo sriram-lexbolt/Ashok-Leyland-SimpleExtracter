@@ -1,0 +1,36 @@
+{
+  "seed": "explicit-document-level-split-v1",
+  "policy": "Development uses only development/. Holdout is evaluated after the parser is frozen. First pages were inspected for file triage before the split. Do not move holdout documents into development after seeing results.",
+  "development": [
+    {
+      "path": "pdfs/development/Table 02_Ver.01.pdf",
+      "sha256": "852fe8bec1fe0be7ae5c0ba873181e396575fbc00251597426675c5650d99b72"
+    },
+    {
+      "path": "pdfs/development/Table 03_Ver.01.pdf",
+      "sha256": "f0599330fd38425f754d57a248d0f6cf80d12de3f8aa3b79e32758c508cd2e60"
+    },
+    {
+      "path": "pdfs/development/Table 05_Ver.01.pdf",
+      "sha256": "a191a2aa5c639c64870338717a2fb0637f0c4adb9e9f89154419c4dc7c71ad5c"
+    },
+    {
+      "path": "pdfs/development/Table 07_Ver.01.pdf",
+      "sha256": "1750ac6ad01352cb62ce4e21c2dee108f5c7d7a6269c83c9df4cb8d28b035163"
+    },
+    {
+      "path": "pdfs/development/Table 4E_Ver.01.pdf",
+      "sha256": "105abc3852ef3476f92398444300758b123f93d39221f49dcca0a86fde0f98a7"
+    }
+  ],
+  "holdout": [
+    {
+      "path": "pdfs/holdout/Table 06_Ver.01.pdf",
+      "sha256": "4668f5c2028c7d75d5e0a1c8a0507da32a0252730715144b192c2d761957980b"
+    },
+    {
+      "path": "pdfs/holdout/Table 11_Ver.01.pdf",
+      "sha256": "aa0bfd6075126942a3ed7eedbaff9b1361e43a2efe4874db44b64be088d37e10"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jags AL Data Extracter · PDF to JSON</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="Jags AL Data Extracter home"><span class="brand-icon">J<span>↗</span></span><span>Jags AL Data Extracter<span class="brand-dot">.</span></span></a>
+    <div class="nav-label">WORKSPACE</div>
+    <div class="nav-item active"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h5"/></svg>PDF to JSON<span class="nav-arrow">↗</span></div>
+    <div id="batch-nav" class="batch-nav" hidden><div class="nav-label">CURRENT BATCH</div><div id="document-list"></div></div>
+    <div class="sidebar-bottom"><span class="status-dot"></span><div>Runs on your computer<small>No API key needed</small></div><span class="local-tag">LOCAL</span></div>
+  </aside>
+  <main>
+    <header class="topbar"><span>Workspace <span class="slash">/</span> <strong>Document extraction</strong></span><span class="version">PDF → JSON</span></header>
+    <div class="content">
+      <div class="intro"><div><div class="eyebrow"><span></span> DOCUMENT INTELLIGENCE, SIMPLIFIED</div><h1>Every detail.<br> <em>Ready to use.</em></h1><p>Turn your technical PDFs into structured JSON.<br> Upload, review the extracted data, and take it with you.</p></div><div class="intro-note"><span class="note-icon">{ }</span><p>Your specifications,<br>with their structure intact.</p><span>FIELDS · TABLES · SOURCE PAGES</span></div></div>
+      <div id="error" class="error-banner" role="alert" hidden></div>
+      <section id="upload-section" class="upload-layout" aria-label="Upload PDFs">
+        <div class="upload-card">
+          <div class="card-heading"><span class="step-number">01</span><h2>Add your documents</h2><span class="small-muted">PDF files</span></div>
+          <div id="drop-zone" class="drop-zone" role="button" tabindex="0" aria-label="Choose PDF files or drop them here">
+            <div class="upload-icon"><svg viewBox="0 0 24 24"><path d="M12 16V3m-5 5 5-5 5 5M4 15v5a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5"/></svg></div>
+            <h3>Drop your PDFs here</h3><p>or <span class="text-link">browse files</span> from your computer</p><small>Up to 10 PDFs · 25 MB per file · 100 MB per batch</small>
+          </div>
+          <input id="file-input" type="file" accept=".pdf,application/pdf" multiple hidden>
+          <div id="selected-files" class="selected-files"></div>
+          <div class="upload-footer"><span><svg viewBox="0 0 24 24"><path d="M12 3 4 7v5c0 5 8 9 8 9s8-4 8-9V7zM9 12l2 2 4-4"/></svg>Files stay on this local server</span><button id="extract-button" class="button primary" disabled>Extract JSON <span>↗</span></button></div>
+        </div>
+        <div class="guide-card"><span class="eyebrow">A SIMPLE WORKFLOW</span><h2>From document<br>to usable data.</h2><ol><li><span>1</span><div><strong>Upload your PDFs</strong><p>Add one document or a small batch.</p></div></li><li><span>2</span><div><strong>Check the details</strong><p>Review fields and tables beside the original page.</p></div></li><li><span>3</span><div><strong>Download your JSON</strong><p>Save individual files or the whole batch as a ZIP.</p></div></li></ol><div class="guide-foot">Built for AIS technical specifications.<br>Selectable text is extracted locally.</div></div>
+      </section>
+      <section id="empty-state" class="empty-state"><div class="mini-doc"><span></span><span></span><span></span><b>PDF</b></div><div class="flow-line">········ <span>→</span> ········</div><div class="mini-json">{<br><span>"field_id": "A1.6",</span><br><span>"values": [ … ]</span><br>}</div><div class="empty-copy"><h3>A clearer view of your documents.</h3><p>Field numbers, values, merged tables, and page references<br>come together in one reviewable file.</p></div></section>
+      <section id="results" class="results" hidden aria-label="Extraction results">
+        <div class="results-heading"><div><span class="eyebrow">YOUR EXTRACTION</span><h2 id="results-title">Processing documents…</h2><p id="results-summary" aria-live="polite"></p></div><div class="result-actions"><button id="clear-button" class="button secondary" disabled>New batch</button><a id="batch-download" class="button primary disabled" aria-disabled="true">Download batch <span>↓</span></a></div></div>
+        <div id="batch-progress" class="progress-card"><div><span id="progress-label">Preparing documents…</span><strong id="progress-percent">0%</strong></div><div class="progress-track"><div id="progress-bar"></div></div></div>
+        <div id="review" class="review" hidden>
+          <div class="review-toolbar"><div class="document-heading"><span class="pdf-badge">PDF</span><div><h3 id="document-name"></h3><p id="document-summary"></p></div></div><a id="json-download" class="button secondary">Download JSON <span>↓</span></a></div>
+          <div id="review-notes" class="review-notes" hidden></div>
+          <div class="review-columns">
+            <div class="source-panel"><div class="panel-heading"><span>SOURCE DOCUMENT</span><div class="page-control"><button id="previous-page" aria-label="Previous source page">←</button><label for="page-select" class="sr-only">Source page</label><select id="page-select"></select><button id="next-page" aria-label="Next source page">→</button></div></div><div class="source-image-wrap"><img id="source-image" alt="Original PDF page"><div id="image-error" hidden>Source preview could not be loaded. Select another page or retry.</div></div></div>
+            <div class="data-panel"><div class="tabs" role="tablist" aria-label="Extracted data views"><button role="tab" id="tab-fields" aria-controls="data-view" aria-selected="true" data-tab="fields">Fields <span id="field-count"></span></button><button role="tab" id="tab-tables" aria-controls="data-view" aria-selected="false" data-tab="tables">Tables</button><button role="tab" id="tab-json" aria-controls="data-view" aria-selected="false" data-tab="json">JSON</button><button role="tab" id="tab-text" aria-controls="data-view" aria-selected="false" data-tab="text">Text</button></div><div id="field-tools" class="field-tools"><label class="search-wrap"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><input id="field-search" type="search" placeholder="Search a field, description, or value" aria-label="Search extracted fields"></label><label class="page-filter"><input id="current-page-only" type="checkbox"> This page</label></div><div id="data-view" class="data-view" role="tabpanel" aria-labelledby="tab-fields"></div><div class="data-foot"><span class="status-dot"></span>Values are preserved as text, including units and placeholders.</div></div>
+          </div>
+        </div>
+      </section>
+      <footer class="page-footer"><span>Jags AL Data Extracter <span class="footer-dot">·</span> Made for the details.</span><span>Scanned pages require OCR. Image content is flagged for review.</span></footer>
+    </div>
+  </main>
+</body>
+</html>
