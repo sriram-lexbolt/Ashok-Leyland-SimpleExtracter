@@ -39,32 +39,138 @@ Some multi-column layouts include a narrow blank spacer cell in the field values
 
 The extraction uses the earlier project's idea of deterministic clause regexes and parent relationships, adapted for these AIS forms. The new schema and CPU-only extraction are independent of the original GPU/OCR and AI labeling services. Reference reviewed: [PaddleOCR-Reggex-Experiment](https://github.com/sriram403/PaddleOCR-Reggex-Experiment), commit `10276a86fe7c29b34f245622eb63af686e1734ff`. A read-only clone is in `reference/`.
 
-## JSON structure
+## JSON output
 
-Top-level keys are `schema_version`, `parser_version`, `document`, `extraction`, `fields`, and `pages`. A field looks like this (abbreviated):
+Every PDF produces one JSON file with the same structure. The keys never change from PDF to PDF; only the number of items in lists and some values (which can be `null` when the PDF does not provide them) differ. Examples below are taken from the supplied Table 02, Table 03 and Table 4E files.
 
-```json
+### Overview
+
+```
 {
-  "id": "f00007",
-  "field_id": "A1.6",
-  "parent_id": "f00001",
-  "kind": "field",
-  "description": "Name of model and variants\n(Features differentiating the model and its variants to\nbe given in a separate table)",
-  "values": [
-    {
-      "text": "BADA DOST i9 TNZX",
-      "column_label": null,
-      "row_label": null,
-      "source_page": 1,
-      "inherited_from_merged_cell": false,
-      "source_cell": {"table_id": "p1-t1", "row": 7, "column": 3}
-    }
+  "schema_version": "1.0",
+  "parser_version": "1.0.0",
+  "document":   { filename, sha256, page_count, table_number, standard, part, title, document_date },
+  "extraction": { method, generated_at, status, field_count, table_count, requires_ocr_pages, warnings[] },
+  "fields": [
+    { id, field_id, parent_id, level, kind, description, source_page, table_id, row, bbox,
+      values: [ { text, column_label, row_label, source_page, bbox, inherited_from_merged_cell, source_cell } ],
+      continuation_rows: [ { source_page, table_id, row, cells } ],
+      references: [ ... ] }
   ],
-  "source_page": 1
+  "pages": [
+    { page_number, width, height, raw_text, requires_ocr, warnings[],
+      tables: [ { id, source_page, bbox, role, rows, row_count, column_count,
+                  cells: [ { row, column, row_span, column_span, text, bbox } ] } ],
+      images: [ { id, bbox, transcribed } ] }
+  ]
 }
 ```
 
-`id` uniquely identifies a record within its document. `field_id` reflects what was printed and can repeat or be null. Parent links use record `id` values. Page numbers are one-based; cell row/column indices are zero-based. Coordinates are PDF points from the top-left of the page. Table `rows` keep `null` for positions covered by merged cells, while `cells` describes the actual cell owners and spans. No numeric conversion or cross-document conflict resolution is attempted.
+`fields` is the interpreted view (one record per form row). `pages` is the evidence: the page text and every table cell as found, so any field can be checked against it.
+
+Conventions: page numbers start at 1; table row and column numbers start at 0. A `bbox` is `[x0, top, x1, bottom]` in PDF points (1/72 inch) measured from the top-left corner of the page; an A4 page is about 595 × 842.
+
+### Top level
+
+| Key | Meaning | Example |
+|---|---|---|
+| `schema_version` | Version of this JSON layout. Changes only if keys are added, renamed or removed. | `"1.0"` |
+| `parser_version` | Version of the extraction rules that produced the file. | `"1.0.0"` |
+
+### `document`
+
+| Key | Meaning | Example |
+|---|---|---|
+| `filename` | Name of the uploaded file. | `"Table 03_Ver.01.pdf"` |
+| `sha256` | Fingerprint of the file bytes; identifies exactly which file was read. | `"f0599330…2cd2e60"` |
+| `page_count` | Number of pages read. | `20` |
+| `table_number` | AIS table number from the title "Table 3 of AIS 007". `null` if there is no such title. | `"3"`, `"4E"` |
+| `standard` | Standard named in that title. | `"AIS-007"` |
+| `part` | Part letter from "PART B – VEHICLE OVERALL". | `"B"` |
+| `title` | Part title from the same line. | `"VEHICLE OVERALL"` |
+| `document_date` | Date printed as "Date: …" on page 1, as written. | `"06.08.2026"` |
+
+### `extraction`
+
+| Key | Meaning | Example |
+|---|---|---|
+| `method` | How the content was read. Always native text and ruled tables (no OCR). | `"native_text_and_ruled_tables"` |
+| `generated_at` | When the file was produced (UTC). | `"2026-09-30T15:24:08+00:00"` |
+| `status` | `"complete"` when there are no warnings, otherwise `"needs_review"`. | Table 03 is `"needs_review"` because pages 1, 3 and 16 contain images |
+| `field_count` | Number of records in `fields`. | `646` |
+| `table_count` | Number of tables found on all pages, including signature-block tables. | `38` |
+| `requires_ocr_pages` | Pages with almost no selectable text (scanned images). | `[]`; a scanned page 4 would give `[4]` |
+| `warnings` | Every page warning, with its page number. | `{"source_page": 1, "message": "Embedded images are referenced by location; their visual content is not transcribed."}` |
+
+### `fields[]`: one record per form row
+
+| Key | Meaning | Example |
+|---|---|---|
+| `id` | Unique record id within this file. Use it for links. | `"f00002"` |
+| `field_id` | Clause number as printed, without spaces or a trailing dot. `null` on forms without numbers (Table 07, Table 11). Can repeat if the form repeats it. | `"B1.1"`; printed `"D 22.14.4 I."` becomes `"D22.14.4"` |
+| `parent_id` | `id` of the parent record, found from the clause number. `null` at the top level. | B1.1 → the record of B1.0; A1.1 → A1.0 |
+| `level` | Depth in the hierarchy (1 = top). | B1.0 is `1`, B1.1 is `2`, B1.8.1 is `3` |
+| `kind` | `"section"` for a heading (number ends in `.0`, or no value is filled in); otherwise `"field"`. | A1.0 "Details of Vehicle Manufacturer" is a section; A1.7 "Plant/(s) of manufacture" is a section because its value cell is empty |
+| `description` | Text of the description cell, line breaks kept. | `"Overall Length mm"` |
+| `source_page` | Page of the row. | `1` |
+| `table_id` | Table the row belongs to (see `pages[].tables[].id`). `null` for text-only records. | `"p1-t1"` (page 1, table 1) |
+| `row` | Row number in that table. | `2` |
+| `bbox` | Box around the whole row. | `[19.08, 98.22, 579.18, 132.66]` |
+| `values` | The declared values, in printed order (left to right, then top to bottom). Empty list when the row has no value cells. | B1.1 has six values (three body types × two wheelbases) |
+| `continuation_rows` | Rows under this record that have no clause number of their own, with their cell texts. Nothing is dropped. | Table 4E 1.2.1.13.1 "Engine Power Table": `{"row": 30, "cells": ["(1)", "1100", "15.5"]}` |
+| `references` | Mentions of annexures, enclosures or appendices in the description or values, as printed. | `["Refer Annexure T7 – C"]` on B1.8 |
+
+### `fields[].values[]`
+
+| Key | Meaning | Example |
+|---|---|---|
+| `text` | Value exactly as printed: units, placeholders and line breaks kept, no number conversion. `""` means the cell is empty. | `"4750"`, `"10 degs"`, `"NA"`, `"--"`, `"Diesel\n(Maximum 7% bio-diesel blend)"` |
+| `column_label` | Column heading the value sits under, when the section has a heading row. | `"2490 WB"`, `"GVW 2890 kg"` |
+| `row_label` | Row heading inside the field, when a field is split into rows. | `"CC"`, `"FSD"`, `"HSD"`, `"FSD / HSD"` |
+| `source_page` | Page of the value. | `1` |
+| `bbox` | Box of the cell the value was read from. | `[269.0, 109.68, 421.72, 132.66]` |
+| `inherited_from_merged_cell` | `true` when the value comes from a merged cell that started in an earlier row and also covers this one. | B1.1 HSD → 4925 is `true`: the 4925 cell is printed once across the FSD and HSD rows |
+| `source_cell` | The table cell the value was read from: `table_id`, `row`, `column`. For inherited values it points to the row that owns the merged cell. | HSD's 4925 → `{"table_id": "p1-t1", "row": 3, "column": 4}` (row 3 is FSD) |
+
+### `pages[]`
+
+| Key | Meaning | Example |
+|---|---|---|
+| `page_number` | Page number. | `1` |
+| `width`, `height` | Page size in points. | `595.44`, `841.68` (A4) |
+| `raw_text` | All selectable text on the page, in reading order. Useful when a table could not be interpreted. | Table 11 page 2 heading "Code for Year of Production: Digit 10 in VIN" is only here |
+| `requires_ocr` | `true` when the page has fewer than 40 characters of text (likely a scan). | `false` |
+| `warnings` | Notes for this page. | Image present; no ruled table detected; OCR required |
+| `tables` | Every table found on the page (below). | Table 03 page 1 has a content table and a signature table |
+| `images` | Location of each embedded picture. The picture content is not read. | `{"id": "p1-image1", "bbox": [186.75, 18.0, 393.3, 52.2], "transcribed": false}` (the logo) |
+
+### `pages[].tables[]`
+
+| Key | Meaning | Example |
+|---|---|---|
+| `id` | Table id: page and position. | `"p1-t1"` |
+| `source_page` | Page of the table. | `1` |
+| `bbox` | Box around the table. | `[19.08, 64.26, 579.18, 737.5]` |
+| `role` | `"content"`, or `"footer"` for the signature block (Manufacturer / Test agency), which is kept but not turned into fields. | `"footer"` |
+| `rows` | The grid as a list of rows. `null` marks a position covered by a merged cell; `""` is a real empty cell. | `["B1.1", "Overall Length mm", null, "CC", "4750", "4988", null]` |
+| `row_count`, `column_count` | Grid size. Word-made PDFs often have extra thin columns. | `50`, `7` |
+| `cells` | Each real cell once, with its position, size and text (below). | |
+
+### `pages[].tables[].cells[]`
+
+| Key | Meaning | Example |
+|---|---|---|
+| `row`, `column` | Top-left grid position of the cell. | `3`, `4` |
+| `row_span`, `column_span` | How many grid rows and columns the cell covers. Above 1 means a merged cell. | 4925 on Table 03 has `row_span: 2` (FSD and HSD rows) |
+| `text` | Cell text as printed. | `"4925"` |
+| `bbox` | Box of the cell. | `[269.0, 109.68, 421.72, 132.66]` |
+
+### What is not in the output
+
+- Content of images and drawings (only their position is recorded).
+- Text of scanned pages (the page is flagged instead).
+- Numbers converted from text, or units split off: `"170 Nm @ 1600 – 2400 rpm"` stays as written.
+- Links between documents: `references` records "Refer Annexure T7 – C" as text but does not open Table 07.
 
 ## Development and reserved test PDFs
 

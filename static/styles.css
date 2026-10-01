@@ -39,7 +39,7 @@ h3 { font-size: 15px; font-weight: 600; margin: 0; overflow-wrap: anywhere; }
 .panel-head .muted { font-size: 13px; }
 
 /* Upload */
-.upload { max-width: 760px; }
+.upload { max-width: 760px; margin: 0 auto; }
 .drop-zone { margin: 16px 20px; padding: 36px 16px; border: 1px dashed #aab3bf; border-radius: var(--radius); background: #fafbfc; text-align: center; color: var(--muted); cursor: pointer; }
 .drop-zone:hover, .drop-zone.dragging { border-color: var(--accent); background: #f0f5fb; }
 .drop-zone:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -54,7 +54,7 @@ h3 { font-size: 15px; font-weight: 600; margin: 0; overflow-wrap: anywhere; }
 .file-chip button:hover { color: var(--danger); }
 .pdf-badge { display: none; }
 .upload-actions { display: flex; justify-content: flex-end; padding: 16px 20px; }
-.hint { max-width: 760px; margin-top: 12px; font-size: 13px; color: var(--muted); }
+.hint { max-width: 760px; margin: 12px auto 0; font-size: 13px; color: var(--muted); }
 
 /* Buttons */
 .button { display: inline-flex; align-items: center; justify-content: center; height: 34px; padding: 0 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--text); font-size: 13px; font-weight: 500; text-decoration: none; white-space: nowrap; cursor: pointer; }
@@ -158,3 +158,4 @@ h3 { font-size: 15px; font-weight: 600; margin: 0; overflow-wrap: anywhere; }
   .result-actions .button { flex: 1; }
   .field-tools { flex-wrap: wrap; }
 }
+body:not(.compact) .error-banner { max-width: 760px; margin-left: auto; margin-right: auto; }
