@@ -1,7 +1,7 @@
 {
   "mode": "regression",
-  "parser_version": "1.1.0",
-  "engine_sha256": "2427b7ee2c4ade17868a4cb92dad87a4944c5afeff8db730f6875bc7a6edea67",
+  "parser_version": "1.2.0",
+  "engine_sha256": "564d7cad80e33a1fbf903ecc662e2b5e03ccd656c8cd93a5a7029109a54ed230",
   "frozen_parser": {
     "parser_version": "1.0.0",
     "engine_sha256": "2a71363040bfabe4ddd197eead6b8e3701905821f91fc9080f1d45a3c1cf3f64",
@@ -829,7 +829,7 @@
       "sha256": "aa0bfd6075126942a3ed7eedbaff9b1361e43a2efe4874db44b64be088d37e10",
       "expected_pages": 2,
       "processed_pages": 2,
-      "field_count": 40,
+      "field_count": 38,
       "table_count": 5,
       "checks": [
         {

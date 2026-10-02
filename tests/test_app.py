@@ -68,6 +68,25 @@ def test_batch_duplicates_and_partial_failure(client):
     assert client.get(f"/api/jobs/{job['id']}/documents/2").status_code == 409
 
 
+def test_table11_upload_and_download_keep_year_and_month_context(client):
+    source = ROOT / "pdfs/holdout/Table 11_Ver.01.pdf"
+    response = client.post("/api/jobs", files=[("files", (source.name, source.read_bytes(), "application/pdf"))])
+    assert response.status_code == 202
+    job = await_job(client, response.json()["id"])
+    assert job["documents"][0]["status"] == "complete"
+    base = f"/api/jobs/{job['id']}/documents/0"
+    result = client.get(base).json()
+    assert result["parser_version"] == "1.2.0"
+    values = {(v["row_label"], v["column_label"]): v["text"]
+              for f in result["fields"] for v in f["values"] if v["column_label"]}
+    assert len(values) == 390
+    assert values[("CODE", "2026")] == "T"
+    assert values[("JAN", "2026")] == "S"
+    assert values[("JAN", "2041")] == "A"
+    assert values[("DEC", "2055")] == "T"
+    assert client.get(base + "/download").json() == result
+
+
 def test_reject_invalid_uploads_without_leaving_files(client, monkeypatch):
     assert client.post("/api/jobs", files=[("files", ("image.txt", b"abc"))]).status_code == 400
     assert client.post("/api/jobs", files=[("files", ("pretend.pdf", b"not a pdf"))]).status_code == 400

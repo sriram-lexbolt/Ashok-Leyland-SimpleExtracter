@@ -14,7 +14,7 @@ from typing import Callable
 
 import pdfplumber
 
-PARSER_VERSION = "1.1.0"
+PARSER_VERSION = "1.2.0"
 MAX_PAGES = 200
 SPACER_WIDTH = 6        # cells this narrow are layout slivers, whatever they contain
 EMPTY_SPACER_WIDTH = 12  # empty cells narrower than this are slivers too; real blank answers are much wider
@@ -118,7 +118,61 @@ def _value(cell: dict, table: dict, row_index: int, label: str | None = None,
             "source_cell": {"table_id": table["id"], "row": cell["row"], "column": cell["column"]}}
 
 
-def _interpret_table(table: dict, records: list[dict], context: dict) -> None:
+def _year_headers(rows: list[list[dict]], index: int) -> list[dict]:
+    """Recognise an ordered year axis and align it to the cells directly below.
+
+    PDF borders can split a printed heading into a text cell and tiny blank
+    cells. Match containment rather than requiring identical cell widths.
+    Ordinary numeric answer rows are not headings.
+    """
+    if index + 1 >= len(rows):
+        return []
+    years = [c for c in rows[index] if re.fullmatch(r"(?:19|20|21)\d{2}", c["text"])]
+    if len(years) < 3:
+        return []
+    numbers = [int(c["text"]) for c in years]
+    if numbers != list(range(numbers[0], numbers[0] + len(numbers))):
+        return []
+    others = [c for c in rows[index] if c["text"] and c not in years]
+    if len(others) > 1 or any(c["text"].upper() != "YEAR" for c in others):
+        return []
+    following = [c for c in rows[index + 1] if not _is_spacer(c)]
+    if len(following) != len(years) + 1 or not following[0]["text"]:
+        return []
+    if following[0]["bbox"][2] > years[0]["bbox"][0] + .2:
+        return []
+    headers = []
+    for year, value in zip(years, following[1:]):
+        if not (value["bbox"][0] - .2 <= year["bbox"][0]
+                and year["bbox"][2] <= value["bbox"][2] + .2):
+            return []
+        header = dict(year)
+        header["bbox"] = [value["bbox"][0], year["bbox"][1],
+                          value["bbox"][2], year["bbox"][3]]
+        headers.append(header)
+    return headers
+
+
+def _table_heading(page, table: dict, tables: list[dict]) -> dict | None:
+    """Read a nearby caption outside the ruled table, without taking another table's text."""
+    x0, top, x1, _ = table["bbox"]
+    preceding = [t["bbox"][3] for t in tables if t["bbox"][3] <= top
+                 and t["bbox"][0] < x1 and t["bbox"][2] > x0]
+    strip_top = max(page.bbox[1], top - 24, max(preceding, default=0))
+    if strip_top >= top:
+        return None
+    words = page.crop((x0, strip_top, x1, top)).extract_words()
+    if not words:
+        return None
+    bottom = max(w["bottom"] for w in words)
+    line = sorted((w for w in words if abs(w["bottom"] - bottom) < 2), key=lambda w: w["x0"])
+    return {"text": " ".join(w["text"] for w in line),
+            "bbox": bbox((min(w["x0"] for w in line), min(w["top"] for w in line),
+                          max(w["x1"] for w in line), bottom))}
+
+
+def _interpret_table(table: dict, records: list[dict], context: dict,
+                     heading: dict | None = None) -> None:
     rows = [_active_cells(table, r) for r in range(table["row_count"])]
     if rows and _is_footer(rows[0]):
         table["role"] = "footer"
@@ -143,6 +197,8 @@ def _interpret_table(table: dict, records: list[dict], context: dict) -> None:
     headers_scope = None  # code whose sub-clauses a heading field applies to
     last_row = None
     previous = context.get("previous") if coded else None
+    year_grid = False
+    grid_section = None
 
     def next_values(index: int, count: int = 3) -> list[list[dict]]:
         following = [r for r in rows[index + 1:] if any(c["text"] for c in r)][:count]
@@ -158,6 +214,22 @@ def _interpret_table(table: dict, records: list[dict], context: dict) -> None:
         nonempty = [c for c in cells if c["text"]]
         if not nonempty:
             continue
+        if not coded:
+            year_headers = _year_headers(rows, row_index)
+            if year_headers:
+                headers, headers_row, headers_scope = year_headers, row_index, None
+                year_grid = True
+                if grid_section is None and heading:
+                    grid_section = {
+                        "id": f"f{len(records) + 1:05d}", "field_id": None,
+                        "parent_id": None, "level": 1, "kind": "section",
+                        "description": heading["text"], "values": [],
+                        "source_page": table["source_page"], "table_id": table["id"],
+                        "row": None, "bbox": heading["bbox"],
+                        "continuation_rows": [], "references": [],
+                    }
+                    records.append(grid_section)
+                continue
         prev_row, last_row = last_row, row_index
         code_cell = nonempty[0] if field_code(nonempty[0]["text"]) else None
         if coded and (not code_cell or code_cell["row"] != row_index):
@@ -198,7 +270,15 @@ def _interpret_table(table: dict, records: list[dict], context: dict) -> None:
         else:
             row_labels = []
         row_label = " / ".join(c["text"] for c in row_labels if c["text"]) or None
-        is_section = bool(code and code.endswith(".0")) or not any(c["text"] for c in right)
+        if year_grid:
+            # A different layout (e.g. the ordinary VIN details below the grid)
+            # ends this axis. Do not carry year headings into unrelated fields.
+            if len(right) != len(headers) or any(_header(c, headers) is None for c in right):
+                headers, headers_row, headers_scope = [], None, None
+                year_grid, grid_section = False, None
+            else:
+                row_label = description["text"]
+        is_section = bool(code and code.endswith(".0")) or (not year_grid and not any(c["text"] for c in right))
         # Headings end at the next .0 code, unless the heading row sits directly above it.
         # Headings taken from a field only cover that field's own sub-clauses.
         if code and code.endswith(".0") and not (headers_row is not None and headers_row == prev_row):
@@ -212,7 +292,8 @@ def _interpret_table(table: dict, records: list[dict], context: dict) -> None:
             headers, headers_row, headers_scope = right, row_index, None
         record = {
             "id": f"f{len(records) + 1:05d}", "field_id": code,
-            "parent_id": None, "level": len(code.split(".")) if code else 1,
+            "parent_id": grid_section["id"] if year_grid and grid_section else None,
+            "level": 2 if year_grid and grid_section else len(code.split(".")) if code else 1,
             "kind": "section" if is_section else "field", "description": description["text"],
             "values": [_value(c, table, row_index, None if is_section else _header(c, headers), row_label) for c in right],
             "source_page": table["source_page"], "table_id": table["id"], "row": row_index,
@@ -254,6 +335,9 @@ def _hierarchy(records: list[dict]) -> None:
             else:
                 record["level"] = 1
             seen[code] = record
+        elif record["parent_id"] is not None:
+            # Lookup grid rows already have a parent determined from their caption.
+            pass
         elif section and record["kind"] == "section" and not section["field_id"]:
             # Without codes, consecutive headings are siblings, not nested.
             record["parent_id"] = section["parent_id"]
@@ -261,7 +345,7 @@ def _hierarchy(records: list[dict]) -> None:
         elif section:
             record["parent_id"] = section["id"]
             record["level"] = section["level"] + 1
-        if record["kind"] == "section":
+        if record["kind"] == "section" and not (record["table_id"] and record["row"] is None):
             section = record
         text = record["description"] + " " + " ".join(v["text"] for v in record["values"])
         record["references"] = list(dict.fromkeys(m.group(0) for m in REFERENCE.finditer(text)))
@@ -297,7 +381,7 @@ def extract_pdf(path: str | Path, filename: str | None = None,
             page_warnings = []
             tables = [_table_data(t, number, i) for i, t in enumerate(page.find_tables(), 1)]
             for table in tables:
-                _interpret_table(table, records, context)
+                _interpret_table(table, records, context, _table_heading(page, table, tables))
             content_tables = [t for t in tables if t["role"] == "content"]
             if not content_tables and len(raw_text.strip()) >= 40:
                 _text_fields(raw_text, number, records)
@@ -321,13 +405,16 @@ def extract_pdf(path: str | Path, filename: str | None = None,
     table_match = re.search(r"Table\s+(\d+[A-Z]?)\s+of\s+AIS[\s-]*0*07", first_text, re.I)
     part_match = re.search(r"PART\s+([A-Z])\s*[–-]\s*([^\n]+)", first_text)
     date_match = re.search(r"Date:\s*(\d{1,2}[./]\d{1,2}[./]\d{4})", first_text)
+    form_title = next((f["description"] for f in records if f["source_page"] == 1
+                       and f["kind"] == "section"
+                       and re.search(r"SPECIFICATION|DETAILS OF", f["description"])), None)
     return {
         "schema_version": "1.0", "parser_version": PARSER_VERSION,
         "document": {"filename": filename or path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                      "page_count": len(pages), "table_number": table_match.group(1) if table_match else None,
                      "standard": "AIS-007" if table_match else None,
                      "part": part_match.group(1) if part_match else None,
-                     "title": part_match.group(2).strip() if part_match else next((line for line in first_text.splitlines() if "SPECIFICATION" in line or "DETAILS OF" in line), None),
+                     "title": part_match.group(2).strip() if part_match else form_title or next((line for line in first_text.splitlines() if "SPECIFICATION" in line or "DETAILS OF" in line), None),
                      "document_date": date_match.group(1) if date_match else None},
         "extraction": {"method": "native_text_and_ruled_tables", "generated_at": datetime.now(timezone.utc).isoformat(),
                        "status": "needs_review" if warnings else "complete", "field_count": len(records),

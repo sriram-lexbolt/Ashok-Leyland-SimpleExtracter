@@ -82,8 +82,8 @@ def test_references_ignore_plain_words(dimensions):
 def test_regression_blank_spacer_is_not_a_value(electrical, vin_codes):
     assert [v["text"] for v in get_field(electrical, "E28.4")["values"]] == ["NA", "NA", "4 kW"]
     assert [v["text"] for v in get_field(electrical, "E29.4")["values"]] == ["4", "4", "4"]
-    year = next(f for f in vin_codes["fields"] if f["description"] == "YEAR")
-    assert "" not in [v["text"] for v in year["values"]] and len(year["values"]) == 15
+    year_codes = next(f for f in vin_codes["fields"] if f["description"] == "CODE")
+    assert "" not in [v["text"] for v in year_codes["values"]] and len(year_codes["values"]) == 15
 
 
 def test_regression_variant_labels(electrical):

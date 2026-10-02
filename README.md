@@ -4,13 +4,17 @@ A small local application for uploading technical specification PDFs, reviewing 
 
 ## Run on Windows
 
-Python 3.11 or newer is required. From this folder:
+Python 3.11 or newer is required. **Double-click `start.cmd`** to launch the application. It creates the local Python environment and installs missing dependencies automatically, then opens the application in your default browser once the server is ready. Keep the launcher window open while using the app; press Ctrl+C to stop it. First-time setup needs internet access.
+
+Windows does not normally execute `.ps1` files by double-clicking them. The `start.cmd` launcher runs `start.ps1` with an execution-policy setting that applies only to that process.
+
+You can also start it from PowerShell in this folder:
 
 ```powershell
-.\start.ps1 -Install
+.\start.cmd
 ```
 
-After the first installation, run `.\start.ps1`. Open **http://localhost:8000**. If PowerShell blocks scripts, use the equivalent commands:
+To choose another port, run `.\start.cmd -Port 8001`. To reinstall dependencies, run `.\start.cmd -Install`. If you prefer to start it manually, use the equivalent commands:
 
 ```powershell
 python -m venv .venv
@@ -33,6 +37,13 @@ Multiple values stay in source order. Some development layouts also receive vari
 
 This version reads selectable PDF text and ruled tables using pdfplumber. **It does not transcribe scanned pages or diagrams.** Such pages/content are flagged for review. Fields from unruled text are a conservative fallback; the full page text remains available.
 
+### Changes in parser v1.2.0
+
+- Table 11's two uncoded code grids now retain their captions: year of production is Digit 10 in VIN, and month of production is Digit 12. Every code has its printed year in `column_label` and `CODE` or its month in `row_label`. For example, the year code for 2026 is `T`, while January 2026 is `S` and January 2041 is `A`.
+- Repeated year headings switch the labels from 2026–2040 to 2041–2055. Heading rows supply context instead of becoming fields named `YEAR`, `2026`, or `2041`. Grid rows link to their caption through `parent_id`; the ordinary VIN details below the grid keep their own scope.
+- Year headings are matched by cell geometry even when narrow blank columns split their borders. The printed codes and their original source cells are preserved, including unusual entries. The full multiline form title is retained.
+- Regression tests check all 30 year codes, all 360 month codes, all nine ordinary fields, source links, and the upload/download path. These checks validate this reviewed document; they do not measure accuracy on unseen PDFs.
+
 ### Changes in parser v1.1.0
 
 - Empty spacer cells narrower than 12 pt are no longer reported as blank values (v1.0 kept a 7 pt sliver in Table 06 E28.4 and E29.4, and blanks inside the Table 11 code grids). Filled cells are only dropped at 6 pt or narrower, as before.
@@ -43,11 +54,11 @@ This version reads selectable PDF text and ruled tables using pdfplumber. **It d
 
 ### Known issues
 
-- Forms without clause numbers (Table 07, Table 11) have no value boundary, so heading cells there become values (Table 07 "Gear ratio" lists `Gear Ratio | Overall Ratio` as values) and Table 11's code grids are read as rows named after their first cell.
+- Other forms without clause numbers still have incomplete heading inference (Table 07 "Gear ratio" lists `Gear Ratio | Overall Ratio` as values). Table 11's ordered year grids are handled separately using their physical alignment.
 - Merged cells are shared wherever they physically reach. Table 07's variant "Type / Description" receives the variant name; the value is marked `inherited_from_merged_cell`.
 - Clause numbers are copied as printed. Table 06 prints E10.2 and E10.3 under E13.0, so they are linked to E10.0.
 - References are recorded as text and are not linked to the annexure pages or other documents.
-- Text printed outside ruled tables is only in `raw_text`.
+- Text printed outside ruled tables is only in `raw_text`, except nearby captions of recognised year grids, which also become section records.
 - Any embedded image, including a logo, sets the document status to `needs_review`.
 
 Review the Tables view when interpreting variants.
@@ -63,7 +74,7 @@ Every PDF produces one JSON file with the same structure. The keys never change 
 ```
 {
   "schema_version": "1.0",
-  "parser_version": "1.1.0",
+  "parser_version": "1.2.0",
   "document":   { filename, sha256, page_count, table_number, standard, part, title, document_date },
   "extraction": { method, generated_at, status, field_count, table_count, requires_ocr_pages, warnings[] },
   "fields": [
@@ -90,7 +101,7 @@ Conventions: page numbers start at 1; table row and column numbers start at 0. A
 | Key | Meaning | Example |
 |---|---|---|
 | `schema_version` | Version of this JSON layout. Changes only if keys are added, renamed or removed. | `"1.0"` |
-| `parser_version` | Version of the extraction rules that produced the file. | `"1.1.0"` |
+| `parser_version` | Version of the extraction rules that produced the file. | `"1.2.0"` |
 
 ### `document`
 
@@ -102,7 +113,7 @@ Conventions: page numbers start at 1; table row and column numbers start at 0. A
 | `table_number` | AIS table number from the title "Table 3 of AIS 007". `null` if there is no such title. | `"3"`, `"4E"` |
 | `standard` | Standard named in that title. | `"AIS-007"` |
 | `part` | Part letter from "PART B – VEHICLE OVERALL". | `"B"` |
-| `title` | Part title from the same line. | `"VEHICLE OVERALL"` |
+| `title` | Part title, or the complete form heading when no part title is printed. | `"VEHICLE OVERALL"`; Table 11's two-line heading |
 | `document_date` | Date printed as "Date: …" on page 1, as written. | `"06.08.2026"` |
 
 ### `extraction`
@@ -129,7 +140,7 @@ Conventions: page numbers start at 1; table row and column numbers start at 0. A
 | `description` | Text of the description cell, line breaks kept. | `"Overall Length mm"` |
 | `source_page` | Page of the row. | `1` |
 | `table_id` | Table the row belongs to (see `pages[].tables[].id`). `null` for text-only records. | `"p1-t1"` (page 1, table 1) |
-| `row` | Row number in that table. | `2` |
+| `row` | Row number in that table; `null` for a caption outside the table or a text-only record. | `2` |
 | `bbox` | Box around the whole row. | `[19.08, 98.22, 579.18, 132.66]` |
 | `values` | The declared values, in printed order (left to right, then top to bottom). Empty list when the row has no value cells. | B1.1 has six values (three body types × two wheelbases) |
 | `continuation_rows` | Rows under this record that have no clause number of their own, with their cell texts. Nothing is dropped. | Table 4E 1.2.1.13.1 "Engine Power Table": `{"row": 30, "cells": ["(1)", "1100", "15.5"]}` |
@@ -140,8 +151,8 @@ Conventions: page numbers start at 1; table row and column numbers start at 0. A
 | Key | Meaning | Example |
 |---|---|---|
 | `text` | Value exactly as printed: units, placeholders and line breaks kept, no number conversion. `""` means the cell is empty. | `"4750"`, `"10 degs"`, `"NA"`, `"--"`, `"Diesel\n(Maximum 7% bio-diesel blend)"` |
-| `column_label` | Column heading the value sits under, when the section has a heading row. | `"2490 WB"`, `"GVW 2890 kg"` |
-| `row_label` | Row heading inside the field, when a field is split into rows. | `"CC"`, `"FSD"`, `"HSD"`, `"FSD / HSD"` |
+| `column_label` | Column heading the value sits under, when the section has a heading row. | `"2490 WB"`, `"GVW 2890 kg"`, `"2026"` in Table 11 |
+| `row_label` | Row heading inside the field, or the row heading of a year grid. | `"CC"`, `"FSD"`, `"HSD"`, `"FSD / HSD"`, `"JAN"`, `"CODE"` |
 | `source_page` | Page of the value. | `1` |
 | `bbox` | Box of the cell the value was read from. | `[269.0, 109.68, 421.72, 132.66]` |
 | `inherited_from_merged_cell` | `true` when the value comes from a merged cell that started in an earlier row and also covers this one. | B1.1 HSD → 4925 is `true`: the 4925 cell is printed once across the FSD and HSD rows |
@@ -210,13 +221,13 @@ Extracted JSON for the supplied files is under `output/development/` and `output
 
 The evaluator refuses to run if the engine checksum has changed. A future parser should use a new unseen set for a new accuracy claim; these two documents can then become regression cases.
 
-Parser v1.1.0 fixed the v1.0 holdout failures, so Tables 06 and 11 are now regression cases, not unseen data. Re-checking them with the same expectations:
+Parser v1.1.0 fixed the v1.0 holdout failures, so Tables 06 and 11 are now regression cases, not unseen data. Re-checking them with the current parser and the same expectations:
 
 ```powershell
 .\.venv\Scripts\python.exe evaluate.py --regression
 ```
 
-v1.1.0 passes 74/74 value checks and 2/2 variant-label checks ([REGRESSION_REPORT.md](evaluation/REGRESSION_REPORT.md)). This shows the fixes work on those cases; it is **not** an accuracy estimate for new documents. The v1.0 result above remains the last unseen measurement. A new accuracy claim for v1.1 needs PDFs that were not used to build it.
+v1.2.0 passes 74/74 sampled value checks and 2/2 variant-label checks ([REGRESSION_REPORT.md](evaluation/REGRESSION_REPORT.md)). These original checks mostly inspect Table 11's raw grid cells; the complete code-to-year and code-to-month relationships are checked separately in `tests/test_table11.py`. Current JSON is written to `output/regression/`. This shows the fixes work on those cases; it is **not** an accuracy estimate for new documents. The v1.0 result above remains the last unseen measurement. A new accuracy claim needs PDFs that were not used to build the parser.
 
 ## Automated checks
 
@@ -230,7 +241,7 @@ v1.1.0 passes 74/74 value checks and 2/2 variant-label checks ([REGRESSION_REPOR
 ## Application files and API
 
 - `app.py`: local FastAPI server, temporary upload storage, queue, downloads, and source page rendering.
-- `extractor/engine.py`: deterministic extraction engine (parser version 1.1.0).
+- `extractor/engine.py`: deterministic extraction engine (parser version 1.2.0).
 - `static/`: responsive upload/review interface with Fields, Tables, JSON, and Text views.
 - `evaluate.py` and `evaluation/`: reproducible sampled holdout assessment.
 
