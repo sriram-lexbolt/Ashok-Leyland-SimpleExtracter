@@ -53,7 +53,7 @@ MONTH_CODES = {
 
 @pytest.fixture(scope="module")
 def vin():
-    return extract_pdf(ROOT / "pdfs/holdout/Table 11_Ver.01.pdf")
+    return extract_pdf(ROOT / "pdfs/development/Table 11_Ver.01.pdf")
 
 
 def section(vin, title):

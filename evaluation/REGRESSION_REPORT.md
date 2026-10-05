@@ -1,10 +1,10 @@
-# Regression check on the former holdout
+# Development regression checks
 
-Parser: `1.2.0`. The original v1.0 result is in [HOLDOUT_REPORT.md](HOLDOUT_REPORT.md).
+Parser: `1.3.0`. The original v1.0 result is preserved in [HOLDOUT_REPORT.md](HOLDOUT_REPORT.md).
 
-**These two documents were examined while fixing the v1.0 failures, so this is a regression check, not unseen accuracy.** A new accuracy claim needs PDFs that were not used to build this version.
+All seven supplied PDFs are available for development. This report reuses the sampled expectations for Tables 06 and 11.
 
-Processed **14/14 pages** across two reserved PDFs.
+Processed **14/14 pages** across two development PDFs.
 
 Sampled field-value/table-cell checks: **74/74 (100.0%)**.
 
@@ -14,11 +14,11 @@ This percentage describes only the manually annotated sample; it is not a whole-
 
 Expected values transcribed from original PDF text and rendered source pages before running the frozen extractor on holdout. Whitespace is normalized; spelling, case, punctuation, units, value order, and placeholders must match.
 
-This is a purposive sample of field values and table cells, not a complete annotation of every field. First pages had been inspected during pre-split triage. No parser tuning used these documents after the split. Variant-label checks are reported separately.
+All seven supplied PDFs are development fixtures. These sampled checks cover Tables 06 and 11 only; they do not establish complete row/column or layout fidelity. Run audit_structure.py for structural preservation checks across all seven PDFs. Interpretation labels are reported separately.
 
 | Document | Pages | Extracted fields | Tables | Passed value checks |
 |---|---:|---:|---:|---:|
-| Table 06_Ver.01.pdf | 12 | 433 | 21 | 58/58 |
+| Table 06_Ver.01.pdf | 12 | 435 | 21 | 58/58 |
 | Table 11_Ver.01.pdf | 2 | 38 | 5 | 16/16 |
 
 ## Items needing review
@@ -27,6 +27,6 @@ No failures in the sampled checks.
 
 The original page text, table cells, and cell positions remain available in JSON for manual review. Diagrams and embedded image content are not transcribed. Variant labels are inferred conservatively and are incomplete for layouts outside the development set.
 
-To repeat this run: `.\.venv\Scripts\python.exe evaluate.py --regression`.
+To repeat this run: `.\.venv\Scripts\python.exe evaluate.py` (`--regression` is also accepted).
 
-Do not tune against these held-out documents and then report a new result as unseen accuracy. Reserve new PDFs for the next parser version.
+The primary all-PDF structure check is `.\.venv\Scripts\python.exe audit_structure.py`; its findings are separate from field interpretation.

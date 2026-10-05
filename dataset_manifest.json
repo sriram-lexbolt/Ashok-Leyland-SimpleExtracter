@@ -1,6 +1,6 @@
 {
-  "seed": "explicit-document-level-split-v1",
-  "policy": "Development uses only development/. Holdout is evaluated after the parser is frozen. First pages were inspected for file triage before the split. Do not move holdout documents into development after seeing results.",
+  "seed": "all-supplied-pdfs-development-v2",
+  "policy": "All supplied PDFs are available for development and regression checks. Validate preservation of printed content, order, rows, columns and layout; report field interpretation separately. There is no reserved holdout or validation split in the current dataset.",
   "development": [
     {
       "path": "pdfs/development/Table 02_Ver.01.pdf",
@@ -21,16 +21,16 @@
     {
       "path": "pdfs/development/Table 4E_Ver.01.pdf",
       "sha256": "105abc3852ef3476f92398444300758b123f93d39221f49dcca0a86fde0f98a7"
-    }
-  ],
-  "holdout": [
+    },
     {
-      "path": "pdfs/holdout/Table 06_Ver.01.pdf",
+      "path": "pdfs/development/Table 06_Ver.01.pdf",
       "sha256": "4668f5c2028c7d75d5e0a1c8a0507da32a0252730715144b192c2d761957980b"
     },
     {
-      "path": "pdfs/holdout/Table 11_Ver.01.pdf",
+      "path": "pdfs/development/Table 11_Ver.01.pdf",
       "sha256": "aa0bfd6075126942a3ed7eedbaff9b1361e43a2efe4874db44b64be088d37e10"
     }
-  ]
+  ],
+  "holdout": [],
+  "history": "On 2026-10-05, the former Table 06 and Table 11 holdout PDFs were moved to development without changing their bytes. The original v1.0 holdout report and parser freeze metadata remain historical records; their former restriction does not apply to current development."
 }

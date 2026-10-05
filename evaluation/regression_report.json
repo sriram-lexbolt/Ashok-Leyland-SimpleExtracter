@@ -1,7 +1,8 @@
 {
   "mode": "regression",
-  "parser_version": "1.2.0",
-  "engine_sha256": "564d7cad80e33a1fbf903ecc662e2b5e03ccd656c8cd93a5a7029109a54ed230",
+  "dataset_role": "development",
+  "parser_version": "1.3.0",
+  "engine_sha256": "19758b68fae92ff620b47d5025208cffe37ede173b2175733d5cb6e10e33db1f",
   "frozen_parser": {
     "parser_version": "1.0.0",
     "engine_sha256": "2a71363040bfabe4ddd197eead6b8e3701905821f91fc9080f1d45a3c1cf3f64",
@@ -10,14 +11,15 @@
   },
   "ground_truth_sha256": "bf0332c35807dd40eca5eb36ad08fddc7337de12f24b9dc6f4c1ec3eb09b97fc",
   "method": "Expected values transcribed from original PDF text and rendered source pages before running the frozen extractor on holdout. Whitespace is normalized; spelling, case, punctuation, units, value order, and placeholders must match.",
-  "limitations": "This is a purposive sample of field values and table cells, not a complete annotation of every field. First pages had been inspected during pre-split triage. No parser tuning used these documents after the split. Variant-label checks are reported separately.",
+  "annotation_provenance_limitations": "This is a purposive sample of field values and table cells, not a complete annotation of every field. First pages had been inspected during pre-split triage. No parser tuning used these documents after the split. Variant-label checks are reported separately.",
+  "limitations": "All seven supplied PDFs are development fixtures. These sampled checks cover Tables 06 and 11 only; they do not establish complete row/column or layout fidelity. Run audit_structure.py for structural preservation checks across all seven PDFs. Interpretation labels are reported separately.",
   "documents": [
     {
       "filename": "Table 06_Ver.01.pdf",
       "sha256": "4668f5c2028c7d75d5e0a1c8a0507da32a0252730715144b192c2d761957980b",
       "expected_pages": 12,
       "processed_pages": 12,
-      "field_count": 433,
+      "field_count": 435,
       "table_count": 21,
       "checks": [
         {

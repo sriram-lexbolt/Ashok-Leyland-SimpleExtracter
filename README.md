@@ -37,6 +37,16 @@ Multiple values stay in source order. Some development layouts also receive vari
 
 This version reads selectable PDF text and ruled tables using pdfplumber. **It does not transcribe scanned pages or diagrams.** Such pages/content are flagged for review. Fields from unruled text are a conservative fallback; the full page text remains available.
 
+### Changes in parser v1.3.0 (schema 1.1)
+
+Structure fixes, so every printed character is stored exactly once and has a position. Before/after images for each case are in `output/validation/proof/`; regenerate them with `visual_proof.py before` or `visual_proof.py after`.
+
+- Word shades a cell's text area slightly inside its borders. That invisible shading box was read as a second cell inside the real one, so one printed value was stored twice (Table 06 page 5 `-`, page 9 `Optional`). A cell that lies inside another cell and is only a shading box is now dropped.
+- Some cells are printed with part of their border missing (Table 06 page 8 prints no left border beside `E 22.4`; page 9's `E 31.6` and `Identification No. / Part No.` cells have no lower borders). Text there had no cell. These areas now become cells with `ruled: false`, joined across grid lines that are not printed.
+- Row and column numbers come from every printed border line. Table 11 page 1 draws the variant cell wider than the rest, so the table now has a third, narrow column; the variant spans columns 1 and 2, and the other rows leave column 2 blank. Previously `column_span: 2` pointed past a two-column grid.
+- A table printed inside another table's cell records it in `parent` (Table 03 pages 7 and 16). The containing cell keeps only its own words, such as "Seat Identification No. / Part No/Drawing Number.:", instead of a copy of the inner table's text.
+- `text_outside_tables` lists printed lines that are in no table cell (captions, the "Manufacturer:" line above Table 07's signature box) with their positions.
+
 ### Changes in parser v1.2.0
 
 - Table 11's two uncoded code grids now retain their captions: year of production is Digit 10 in VIN, and month of production is Digit 12. Every code has its printed year in `column_label` and `CODE` or its month in `row_label`. For example, the year code for 2026 is `T`, while January 2026 is `S` and January 2041 is `A`.
@@ -58,7 +68,7 @@ This version reads selectable PDF text and ruled tables using pdfplumber. **It d
 - Merged cells are shared wherever they physically reach. Table 07's variant "Type / Description" receives the variant name; the value is marked `inherited_from_merged_cell`.
 - Clause numbers are copied as printed. Table 06 prints E10.2 and E10.3 under E13.0, so they are linked to E10.0.
 - References are recorded as text and are not linked to the annexure pages or other documents.
-- Text printed outside ruled tables is only in `raw_text`, except nearby captions of recognised year grids, which also become section records.
+- Text printed outside ruled tables is listed with its position in `text_outside_tables`, but is not turned into fields, except nearby captions of recognised year grids, which also become section records.
 - Any embedded image, including a logo, sets the document status to `needs_review`.
 
 Review the Tables view when interpreting variants.
@@ -73,8 +83,8 @@ Every PDF produces one JSON file with the same structure. The keys never change 
 
 ```
 {
-  "schema_version": "1.0",
-  "parser_version": "1.2.0",
+  "schema_version": "1.1",
+  "parser_version": "1.3.0",
   "document":   { filename, sha256, page_count, table_number, standard, part, title, document_date },
   "extraction": { method, generated_at, status, field_count, table_count, requires_ocr_pages, warnings[] },
   "fields": [
@@ -85,8 +95,9 @@ Every PDF produces one JSON file with the same structure. The keys never change 
   ],
   "pages": [
     { page_number, width, height, raw_text, requires_ocr, warnings[],
-      tables: [ { id, source_page, bbox, role, rows, row_count, column_count,
-                  cells: [ { row, column, row_span, column_span, text, bbox } ] } ],
+      tables: [ { id, source_page, bbox, role, parent, rows, row_count, column_count,
+                  cells: [ { row, column, row_span, column_span, text, bbox, ruled } ] } ],
+      text_outside_tables: [ { text, bbox } ],
       images: [ { id, bbox, transcribed } ] }
   ]
 }
@@ -100,8 +111,8 @@ Conventions: page numbers start at 1; table row and column numbers start at 0. A
 
 | Key | Meaning | Example |
 |---|---|---|
-| `schema_version` | Version of this JSON layout. Changes only if keys are added, renamed or removed. | `"1.0"` |
-| `parser_version` | Version of the extraction rules that produced the file. | `"1.2.0"` |
+| `schema_version` | Version of this JSON layout. Changes only if keys are added, renamed or removed. | `"1.1"` |
+| `parser_version` | Version of the extraction rules that produced the file. | `"1.3.0"` |
 
 ### `document`
 
@@ -164,7 +175,8 @@ Conventions: page numbers start at 1; table row and column numbers start at 0. A
 |---|---|---|
 | `page_number` | Page number. | `1` |
 | `width`, `height` | Page size in points. | `595.44`, `841.68` (A4) |
-| `raw_text` | All selectable text on the page, in reading order. Useful when a table could not be interpreted. | Table 11 page 2 heading "Code for Year of Production: Digit 10 in VIN" is only here |
+| `raw_text` | All selectable text on the page, in reading order. Useful when a table could not be interpreted. | |
+| `text_outside_tables` | Each printed line that is not inside a table cell, with its box. Together with the table cells, every printed character has exactly one position. | `{"text": "Code for Year of Production: (for 30 years): Digit 10 in VIN", "bbox": [90.0, 45.33, 308.006, 54.33]}` (Table 11 page 2) |
 | `requires_ocr` | `true` when the page has fewer than 40 characters of text (likely a scan). | `false` |
 | `warnings` | Notes for this page. | Image present; no ruled table detected; OCR required |
 | `tables` | Every table found on the page (below). | Table 03 page 1 has a content table and a signature table |
@@ -178,8 +190,9 @@ Conventions: page numbers start at 1; table row and column numbers start at 0. A
 | `source_page` | Page of the table. | `1` |
 | `bbox` | Box around the table. | `[19.08, 64.26, 579.18, 737.5]` |
 | `role` | `"content"`, or `"footer"` for the signature block (Manufacturer / Test agency), which is kept but not turned into fields. | `"footer"` |
-| `rows` | The grid as a list of rows. `null` marks a position covered by a merged cell; `""` is a real empty cell. | `["B1.1", "Overall Length mm", null, "CC", "4750", "4988", null]` |
-| `row_count`, `column_count` | Grid size. Word-made PDFs often have extra thin columns. | `50`, `7` |
+| `parent` | For a table printed inside another table's cell: that table and cell. Otherwise `null`. | Table 03 page 7: `{"table_id": "p7-t1", "row": 20, "column": 2}` |
+| `rows` | The grid as a list of rows. `null` marks a position covered by a merged cell, or a blank area with no printed cell (the cells' spans tell them apart); `""` is a real empty cell. | `["B1.1", "Overall Length mm", null, "CC", "4750", "4988", null]` |
+| `row_count`, `column_count` | Grid size, from every printed border line. Word-made PDFs often have extra thin columns. | `50`, `7` |
 | `cells` | Each real cell once, with its position, size and text (below). | |
 
 ### `pages[].tables[].cells[]`
@@ -190,6 +203,7 @@ Conventions: page numbers start at 1; table row and column numbers start at 0. A
 | `row_span`, `column_span` | How many grid rows and columns the cell covers. Above 1 means a merged cell. | 4925 on Table 03 has `row_span: 2` (FSD and HSD rows) |
 | `text` | Cell text as printed. | `"4925"` |
 | `bbox` | Box of the cell. | `[269.0, 109.68, 421.72, 132.66]` |
+| `ruled` | `false` when the PDF leaves part of this cell's border unprinted; the box is then bounded by the nearest printed lines. | Table 06 page 8 `E 22.4` |
 
 ### What is not in the output
 
@@ -198,36 +212,39 @@ Conventions: page numbers start at 1; table row and column numbers start at 0. A
 - Numbers converted from text, or units split off: `"170 Nm @ 1600 – 2400 rpm"` stays as written.
 - Links between documents: `references` records "Refer Annexure T7 – C" as text but does not open Table 07.
 
-## Development and reserved test PDFs
+## Development PDFs and validation checks
 
-The source PDFs are client documents and are not stored in this repository. To run the tests or the evaluation, place them in `pdfs/development/` and `pdfs/holdout/` as listed in [dataset_manifest.json](dataset_manifest.json); the recorded hashes confirm they are the original files.
-
-The original PDFs were moved into two folders without changing their bytes. Hashes are recorded in [dataset_manifest.json](dataset_manifest.json).
+All seven supplied PDFs are available for development and regression checks. There is no reserved validation or holdout split. Place all originals in `pdfs/development/` as listed in [dataset_manifest.json](dataset_manifest.json); their hashes verify that the files are unchanged. Client PDFs are not stored in this repository.
 
 | Set | Documents | Pages | Purpose |
-|---|---:|---:|---|
-| `pdfs/development/` | Tables 02, 03, 05, 07, 4E | 50 | Parser implementation and automated development checks |
-| `pdfs/holdout/` | Tables 06, 11 | 14 | Evaluation after freezing the parser |
+|---|---|---:|---|
+| `pdfs/development/` | Tables 02, 03, 05, 06, 07, 11, 4E | 64 | Parser development and checks on all supplied layouts |
 
-First pages were inspected for file triage before the split. After separation, the reserved PDFs were not used for parser tuning. The engine checksum and freeze timestamp are in `evaluation/frozen_parser.json`. Expected holdout values were transcribed from the originals before running extraction on that set.
+Tables 06 and 11 were moved from the former holdout folder without changing their bytes. The v1.0 freeze metadata and [HOLDOUT_REPORT.md](evaluation/HOLDOUT_REPORT.md) remain historical records; their former development restriction no longer applies. Existing annotations from that run remain useful regression expectations.
 
-The initial holdout run passed **72/74 sampled value/table-cell checks (97.3%)** and **0/2 variant-label checks**, processing **14/14 pages**. This is sample accuracy, not an estimate for every field or future PDF. Full details, expectations, and actual values are saved in `evaluation/holdout_report.json` and [HOLDOUT_REPORT.md](evaluation/HOLDOUT_REPORT.md).
+### Primary check: printed content and structure
 
-Extracted JSON for the supplied files is under `output/development/` and `output/holdout/`. To reproduce the evaluation using the unchanged frozen parser:
+Validate text preservation, page/table/cell order, row and column spans, blank cells, nested tables, and the information needed to reconstruct the source PDF:
+
+```powershell
+.\.venv\Scripts\python.exe audit_structure.py
+```
+
+This checks every supplied PDF and writes `output/validation/structure_report.md` and `structure_report.json`. Here `validation` names the output reports, not a separate source-document split. Interpretation issues are reported separately from preservation failures.
+
+With v1.3.0 all 64 pages pass: page text and order are preserved, cell spans are consistent, and every printed character is stored in exactly one table cell or `text_outside_tables` line. The JSON is aimed at rebuilding the content and table structure. It does not store fonts, exact glyph positions, image bytes or border drawings, so it cannot produce a pixel-identical copy.
+
+### Sampled value and interpretation regressions
+
+To run the existing 74 sampled value checks and two variant-label checks on Tables 06 and 11:
 
 ```powershell
 .\.venv\Scripts\python.exe evaluate.py
 ```
 
-The evaluator refuses to run if the engine checksum has changed. A future parser should use a new unseen set for a new accuracy claim; these two documents can then become regression cases.
+`--regression` remains an accepted alias. Current extracted JSON is written to `output/regression/`, and results are saved in [REGRESSION_REPORT.md](evaluation/REGRESSION_REPORT.md). This command uses the active parser and never overwrites the historical holdout report.
 
-Parser v1.1.0 fixed the v1.0 holdout failures, so Tables 06 and 11 are now regression cases, not unseen data. Re-checking them with the current parser and the same expectations:
-
-```powershell
-.\.venv\Scripts\python.exe evaluate.py --regression
-```
-
-v1.2.0 passes 74/74 sampled value checks and 2/2 variant-label checks ([REGRESSION_REPORT.md](evaluation/REGRESSION_REPORT.md)). These original checks mostly inspect Table 11's raw grid cells; the complete code-to-year and code-to-month relationships are checked separately in `tests/test_table11.py`. Current JSON is written to `output/regression/`. This shows the fixes work on those cases; it is **not** an accuracy estimate for new documents. The v1.0 result above remains the last unseen measurement. A new accuracy claim needs PDFs that were not used to build the parser.
+v1.3.0 passes these sampled checks. They do not establish complete structural fidelity. All 390 Table 11 code mappings and its nine ordinary fields are checked separately in `tests/test_table11.py`; the all-PDF structure audit remains the primary preservation check.
 
 ## Automated checks
 
@@ -236,14 +253,16 @@ v1.2.0 passes 74/74 sampled value checks and 2/2 variant-label checks ([REGRESSI
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-`tests/test_v1_1.py` pins the v1.1 changes on development documents and includes regression checks on Tables 06 and 11. The other checks use development documents only. They cover known values, merged rows, shared cells, parent/source links, upload validation, encrypted/corrupt PDFs, preview rendering, JSON/ZIP downloads, duplicate filenames, partial batch failure, expiration, and clearing a batch.
+All test PDF fixtures now use `pdfs/development/`. `tests/test_v1_1.py` pins the v1.1 behaviour and `tests/test_table11.py` checks Table 11's full code mappings. The suite covers known values, merged rows, shared cells, parent/source links, upload validation, encrypted/corrupt PDFs, preview rendering, JSON/ZIP downloads, duplicate filenames, partial batch failure, expiration, and clearing a batch.
 
 ## Application files and API
 
 - `app.py`: local FastAPI server, temporary upload storage, queue, downloads, and source page rendering.
-- `extractor/engine.py`: deterministic extraction engine (parser version 1.2.0).
+- `extractor/engine.py`: deterministic extraction engine (parser version 1.3.0).
 - `static/`: responsive upload/review interface with Fields, Tables, JSON, and Text views.
-- `evaluate.py` and `evaluation/`: reproducible sampled holdout assessment.
+- `audit_structure.py`: all-PDF content/order/layout audit, with interpretation notes reported separately.
+- `visual_proof.py`: draws structural problems found in the JSON on the PDF page (`output/validation/proof/`).
+- `evaluate.py` and `evaluation/`: sampled development regressions and preserved historical reports.
 
 API documentation is available at http://localhost:8000/docs. Upload with multipart `files` to `POST /api/jobs`; poll `GET /api/jobs/{id}`; retrieve results from `GET /api/jobs/{id}/documents/{doc_id}`. Downloads use `/download` on the job or document URL.
 

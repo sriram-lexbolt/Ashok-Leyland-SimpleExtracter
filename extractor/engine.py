@@ -14,7 +14,7 @@ from typing import Callable
 
 import pdfplumber
 
-PARSER_VERSION = "1.2.0"
+PARSER_VERSION = "1.3.0"
 MAX_PAGES = 200
 SPACER_WIDTH = 6        # cells this narrow are layout slivers, whatever they contain
 EMPTY_SPACER_WIDTH = 12  # empty cells narrower than this are slivers too; real blank answers are much wider
@@ -43,25 +43,153 @@ def bbox(box) -> list[float]:
     return [round(float(v), 3) for v in box]
 
 
-def _table_data(table, page_number: int, index: int) -> dict:
-    matrix = [[clean(v) if v is not None else None for v in row] for row in table.extract()]
-    xs = sorted({round(v, 4) for c in table.cells for v in (c[0], c[2])})
-    ys = sorted({round(v, 4) for c in table.cells for v in (c[1], c[3])})
-    cells = []
-    for row_index, row in enumerate(table.rows):
-        for col_index, box in enumerate(row.cells):
-            if box is None:
-                continue
-            x0, y0, x1, y1 = box
-            cells.append({
-                "row": row_index, "column": col_index,
-                "row_span": sum(y0 - .01 <= y < y1 - .01 for y in ys),
-                "column_span": sum(x0 - .01 <= x < x1 - .01 for x in xs),
-                "text": matrix[row_index][col_index], "bbox": bbox(box),
-            })
+def _in_box(char: dict, box) -> bool:
+    """pdfplumber's rule: a character belongs to the box holding its centre."""
+    x, y = (char["x0"] + char["x1"]) / 2, (char["top"] + char["bottom"]) / 2
+    return box[0] <= x < box[2] and box[1] <= y < box[3]
+
+
+def _text_in(chars: list[dict], box, exclude=()) -> str:
+    inside = [c for c in chars if _in_box(c, box) and not any(_in_box(c, e) for e in exclude)]
+    return clean(pdfplumber.utils.extract_text(inside)) if inside else ""
+
+
+def _shading(page) -> list[tuple]:
+    """Light filled boxes without an outline: cell shading, which is not a printed border."""
+    def light(colour):
+        values = colour if isinstance(colour, (list, tuple)) else [colour]
+        return bool(values) and all(isinstance(v, (int, float)) and v > .5 for v in values)
+    return [(r["x0"], r["top"], r["x1"], r["bottom"]) for r in page.rects
+            if r["fill"] and not r["stroke"] and light(r["non_stroking_color"])]
+
+
+def _printed_edges(page) -> list[dict]:
+    """Border lines actually drawn, leaving out the outlines of shading boxes."""
+    shading = _shading(page)
+
+    def outlines_shading(e):
+        if e["orientation"] == "h":
+            return any(abs(e["x0"] - s[0]) < .01 and abs(e["x1"] - s[2]) < .01
+                       and min(abs(e["top"] - s[1]), abs(e["top"] - s[3])) < .01 for s in shading)
+        return any(abs(e["top"] - s[1]) < .01 and abs(e["bottom"] - s[3]) < .01
+                   and min(abs(e["x0"] - s[0]), abs(e["x0"] - s[2])) < .01 for s in shading)
+    return [e for e in page.edges if not outlines_shading(e)]
+
+
+def _without_shading_insets(boxes: list[tuple], shading: list[tuple]) -> list[tuple]:
+    """Drop a cell lying inside another cell when it is only a shading box.
+
+    Word shades a cell's text area slightly inside its borders. pdfplumber reads
+    that shading outline as a second, inner cell, so one printed value would be
+    stored twice. Cells in a printed grid never overlap.
+    """
+    def same(a, b):
+        return all(abs(a[i] - b[i]) < .6 for i in range(4))
+
+    def within(inner, outer):
+        return inner != outer and outer[0] - .01 <= inner[0] and outer[1] - .01 <= inner[1] \
+            and inner[2] <= outer[2] + .01 and inner[3] <= outer[3] + .01
+    return [b for b in boxes if not (any(within(b, o) for o in boxes) and any(same(b, s) for s in shading))]
+
+
+def _open_regions(cells: list[dict], xs: list[float], ys: list[float], edges: list[dict],
+                  chars: list[dict]) -> list[tuple]:
+    """Areas of the grid that hold printed text but are not closed by printed borders.
+
+    Some forms leave out part of a cell's border (Table 06 page 8 prints no left
+    border beside "E 22.4"). Without a box, that text would have no position in
+    the table. Neighbouring open slots are joined unless a printed line separates them.
+    """
+    covered = set()
+    for c in cells:
+        covered |= {(r, k) for r in range(c["row"], c["row"] + c["row_span"])
+                    for k in range(c["column"], c["column"] + c["column_span"])}
+    free = {(r, k) for r in range(len(ys) - 1) for k in range(len(xs) - 1)} - covered
+
+    def ruled(orientation, at, start, end):
+        need = (end - start) / 2
+        return any(e["orientation"] == orientation and abs((e["x0"] if orientation == "v" else e["top"]) - at) < 1
+                   and min(end, e["bottom"] if orientation == "v" else e["x1"])
+                   - max(start, e["top"] if orientation == "v" else e["x0"]) > need for e in edges)
+
+    regions = []
+    for r, k in sorted(free):
+        if (r, k) not in free:
+            continue
+        right = k
+        while (r, right + 1) in free and not ruled("v", xs[right + 1], ys[r], ys[r + 1]):
+            right += 1
+        bottom = r
+        while all((bottom + 1, c) in free for c in range(k, right + 1)) \
+                and not ruled("h", ys[bottom + 1], xs[k], xs[right + 1]):
+            bottom += 1
+        free -= {(a, b) for a in range(r, bottom + 1) for b in range(k, right + 1)}
+        box = (xs[k], ys[r], xs[right + 1], ys[bottom + 1])
+        if any(_in_box(c, box) and c["text"].strip() for c in chars):
+            regions.append(box)
+    return regions
+
+
+def _table_data(table, page_number: int, index: int, page=None) -> dict:
+    """The table as printed: one entry per printed cell, placed on the grid of its border lines."""
+    texts = {}
+    for row, values in zip(table.rows, table.extract()):
+        for box, value in zip(row.cells, values):
+            if box is not None:
+                texts[tuple(box)] = clean(value)
+    boxes = list(texts)
+    edges, chars = [], []
+    if page is not None:
+        boxes = _without_shading_insets(boxes, _shading(page))
+        edges, chars = _printed_edges(page), page.chars
+    xs = sorted({round(v, 4) for b in boxes for v in (b[0], b[2])})
+    ys = sorted({round(v, 4) for b in boxes for v in (b[1], b[3])})
+
+    def place(box, text, ruled=True):
+        x0, y0, x1, y1 = (round(v, 4) for v in box)
+        return {"row": ys.index(y0), "column": xs.index(x0),
+                "row_span": ys.index(y1) - ys.index(y0), "column_span": xs.index(x1) - xs.index(x0),
+                "text": text, "bbox": bbox(box), "ruled": ruled}
+    cells = [place(b, texts[b]) for b in boxes]
+    cells += [place(b, _text_in(chars, b), ruled=False) for b in _open_regions(cells, xs, ys, edges, chars)]
+    cells.sort(key=lambda c: (c["row"], c["column"]))
+    matrix = [[None] * (len(xs) - 1) for _ in range(len(ys) - 1)]
+    for c in cells:
+        matrix[c["row"]][c["column"]] = c["text"]
     return {"id": f"p{page_number}-t{index}", "source_page": page_number,
-            "bbox": bbox(table.bbox), "role": "content", "rows": matrix,
-            "row_count": len(matrix), "column_count": len(table.columns), "cells": cells}
+            "bbox": bbox(table.bbox), "role": "content", "parent": None, "rows": matrix,
+            "row_count": len(matrix), "column_count": len(xs) - 1, "cells": cells}
+
+
+def _link_nested(tables: list[dict], chars: list[dict]) -> None:
+    """Record a table printed inside another table's cell, and keep its text only once.
+
+    The containing cell keeps only its own words (e.g. a caption above the inner
+    table); the inner table's words belong to the inner table's cells.
+    """
+    for inner in tables:
+        for outer in tables:
+            host = next((c for c in outer["cells"] if outer is not inner
+                         and _inside(inner["bbox"], c["bbox"])), None)
+            if host:
+                inner["parent"] = {"table_id": outer["id"], "row": host["row"], "column": host["column"]}
+                host["text"] = _text_in(chars, host["bbox"], exclude=[t["bbox"] for t in tables
+                                        if t is not outer and _inside(t["bbox"], host["bbox"])])
+                outer["rows"][host["row"]][host["column"]] = host["text"]
+                break
+
+
+def _text_outside_tables(page, tables: list[dict]) -> list[dict]:
+    """Printed lines that belong to no table cell (captions, signature lines), with their position."""
+    boxes = [c["bbox"] for t in tables for c in t["cells"]]
+    loose = page.filter(lambda obj: obj.get("object_type") != "char"
+                        or not any(_in_box(obj, b) for b in boxes))
+    return [{"text": line["text"], "bbox": bbox((line["x0"], line["top"], line["x1"], line["bottom"]))}
+            for line in loose.extract_text_lines(return_chars=False, x_tolerance=2, y_tolerance=3)]
+
+
+def _inside(inner, outer) -> bool:
+    return all(outer[i] - .5 <= inner[i] for i in (0, 1)) and all(inner[i] <= outer[i] + .5 for i in (2, 3))
 
 
 def _active_cells(table: dict, row_index: int) -> list[dict]:
@@ -379,7 +507,8 @@ def extract_pdf(path: str | Path, filename: str | None = None,
         for number, page in enumerate(pdf.pages, 1):
             raw_text = page.extract_text(x_tolerance=2, y_tolerance=3) or ""
             page_warnings = []
-            tables = [_table_data(t, number, i) for i, t in enumerate(page.find_tables(), 1)]
+            tables = [_table_data(t, number, i, page) for i, t in enumerate(page.find_tables(), 1)]
+            _link_nested(tables, page.chars)
             for table in tables:
                 _interpret_table(table, records, context, _table_heading(page, table, tables))
             content_tables = [t for t in tables if t["role"] == "content"]
@@ -394,7 +523,8 @@ def extract_pdf(path: str | Path, filename: str | None = None,
             if images:
                 page_warnings.append("Embedded images are referenced by location; their visual content is not transcribed.")
             pages.append({"page_number": number, "width": round(page.width, 3), "height": round(page.height, 3),
-                          "raw_text": raw_text, "tables": tables, "images": images,
+                          "raw_text": raw_text, "tables": tables,
+                          "text_outside_tables": _text_outside_tables(page, tables), "images": images,
                           "requires_ocr": requires_ocr, "warnings": page_warnings})
             warnings.extend({"source_page": number, "message": w} for w in page_warnings)
             if progress:
@@ -409,7 +539,7 @@ def extract_pdf(path: str | Path, filename: str | None = None,
                        and f["kind"] == "section"
                        and re.search(r"SPECIFICATION|DETAILS OF", f["description"])), None)
     return {
-        "schema_version": "1.0", "parser_version": PARSER_VERSION,
+        "schema_version": "1.1", "parser_version": PARSER_VERSION,
         "document": {"filename": filename or path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                      "page_count": len(pages), "table_number": table_match.group(1) if table_match else None,
                      "standard": "AIS-007" if table_match else None,

@@ -69,14 +69,14 @@ def test_batch_duplicates_and_partial_failure(client):
 
 
 def test_table11_upload_and_download_keep_year_and_month_context(client):
-    source = ROOT / "pdfs/holdout/Table 11_Ver.01.pdf"
+    source = ROOT / "pdfs/development/Table 11_Ver.01.pdf"
     response = client.post("/api/jobs", files=[("files", (source.name, source.read_bytes(), "application/pdf"))])
     assert response.status_code == 202
     job = await_job(client, response.json()["id"])
     assert job["documents"][0]["status"] == "complete"
     base = f"/api/jobs/{job['id']}/documents/0"
     result = client.get(base).json()
-    assert result["parser_version"] == "1.2.0"
+    assert result["parser_version"] == "1.3.0"
     values = {(v["row_label"], v["column_label"]): v["text"]
               for f in result["fields"] for v in f["values"] if v["column_label"]}
     assert len(values) == 390

@@ -1,7 +1,7 @@
 """Checks for the v1.1 parser changes.
 
-Development documents pin the new behaviour. The Table 06 / Table 11 checks are regression
-tests: those documents were the v1.0 holdout and were examined while fixing these cases.
+All supplied documents are development fixtures. Table 06 and Table 11 were
+originally the v1.0 holdout; their checks are now ordinary development regressions.
 """
 from pathlib import Path
 import pytest
@@ -10,7 +10,6 @@ from extractor.engine import extract_pdf
 
 ROOT = Path(__file__).resolve().parents[1]
 DEV = ROOT / "pdfs" / "development"
-HOLDOUT = ROOT / "pdfs" / "holdout"
 
 
 @pytest.fixture(scope="module")
@@ -30,12 +29,12 @@ def summary():
 
 @pytest.fixture(scope="module")
 def electrical():
-    return extract_pdf(HOLDOUT / "Table 06_Ver.01.pdf")
+    return extract_pdf(DEV / "Table 06_Ver.01.pdf")
 
 
 @pytest.fixture(scope="module")
 def vin_codes():
-    return extract_pdf(HOLDOUT / "Table 11_Ver.01.pdf")
+    return extract_pdf(DEV / "Table 11_Ver.01.pdf")
 
 
 def get_field(result, code):
